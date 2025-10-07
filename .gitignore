@@ -1,0 +1,42 @@
+# Ignorowanie zależności w całym projekcie
+/node_modules
+/server/node_modules
+/frontend/node_modules
+
+# Pliki środowiskowe
+# Nigdy nie commituj plików .env!
+.env*
+!/.env.example
+
+# Logi
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Katalogi z buildami
+/dist
+/frontend/dist
+/build
+
+# Pliki generowane przez Vite
+.vite
+
+# Pliki tymczasowe i systemowe
+.DS_Store
+Thumbs.db
+
+# Katalogi IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Katalog z eksportami CSV
+/server/exports/
