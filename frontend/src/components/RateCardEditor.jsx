@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { Plus, Trash2, X, Edit, Save, XCircle, Download, Upload } from 'lucide-react';
-import AddRateEntryForm from './AddRateEntryForm.jsx'; // Importujemy nowy formularz
-import RateCardImporter from './RateCardImporter.jsx';
+import AddRateEntryForm from './AddRateEntryForm.jsx';
+import DataImporter from './DataImporter.jsx'; // Używamy generycznego importera
 
 const RateCardEditor = ({ customers = [], zones = [] }) => {
   const [rateCards, setRateCards] = useState([]);
@@ -190,6 +190,34 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
     return customers.filter(c => !assignedIds.has(c.id));
   }, [customers, assignedCustomers]);
 
+  // Konfiguracja dla generycznego importera
+  const rateCardImporterConfig = {
+    title: 'Import Rate Entries',
+    apiEndpoint: `/api/rate-cards/${selectedRateCardId}/import`,
+    postDataKey: 'entries', // API oczekuje { entries: [...] }
+    dataMappingFn: (row) => {
+      // Proste mapowanie, zakładając, że nagłówki CSV pasują do oczekiwanych kluczy
+      // Można tu dodać bardziej złożoną logikę, jeśli nagłówki się różnią
+      return {
+        'Rate Type': row['Rate Type'],
+        'Zone Name': row['Zone Name'],
+        'Service Level': row['Service Level'],
+        'Price Micro': row['Price Micro'],
+        'Price Quarter': row['Price Quarter'],
+        'Price Half': row['Price Half'],
+        'Price Half Plus': row['Price Half Plus'],
+        'Price Full 1': row['Price Full 1'],
+        // ... można dodać resztę kolumn cenowych
+      };
+    },
+    previewColumns: [
+      { key: 'Rate Type', header: 'Type' },
+      { key: 'Zone Name', header: 'Zone' },
+      { key: 'Service Level', header: 'Service' },
+      { key: 'Price Full 1', header: 'Price (1 Full)' },
+    ],
+  };
+
   return (
     <div>
         <div>
@@ -236,7 +264,7 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
               {/* Rate Entries Section */}
               <div className="card">
                 {showAddForm && <AddRateEntryForm zones={zones} onSubmit={handleCreateRateEntry} onCancel={() => setShowAddForm(false)} />}
-                {showImporter && <RateCardImporter rateCardId={selectedRateCardId} onSuccess={handleImportSuccess} onCancel={() => setShowImporter(false)} />}
+                {showImporter && <DataImporter {...rateCardImporterConfig} onSuccess={handleImportSuccess} onCancel={() => setShowImporter(false)} />}
                 
                 {!showAddForm && !showImporter && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

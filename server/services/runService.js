@@ -12,22 +12,34 @@ const createRun = async (runData) => {
 };
 
 const findAllRuns = async () => {
-  // W przyszłości można dodać filtrowanie po dacie
-  const { rows } = await db.query('SELECT * FROM runs WHERE is_deleted = FALSE ORDER BY run_date DESC, created_at DESC');
+  // Poprawka: Formatujemy datę bezpośrednio w zapytaniu SQL do stringa 'YYYY-MM-DD'.
+  // To eliminuje wszystkie problemy ze strefami czasowymi po stronie klienta.
+  const sql = `
+    SELECT 
+      id, 
+      TO_CHAR(run_date, 'YYYY-MM-DD') as run_date, 
+      type, truck_id, trailer_id, driver_id, status, created_at, updated_at 
+    FROM runs WHERE is_deleted = FALSE ORDER BY run_date DESC
+  `;
+  const { rows } = await db.query(sql);
   return rows;
 };
 
 const deleteRun = async (runId) => {
-  // Sprawdzamy, czy do przejazdu nie są przypisane żadne zlecenia
-  const checkAssignments = await db.query('SELECT id FROM assignments WHERE run_id = $1', [runId]);
-  if (checkAssignments.rows.length > 0) {
-    throw new Error('Cannot delete a run that has active assignments. Please remove assignments first.');
-  }
-
-  const sql = 'UPDATE runs SET is_deleted = TRUE WHERE id = $1';
+  // Używamy "soft delete" dla spójności i bezpieczeństwa danych.
+  // We use "soft delete" for data consistency and safety.
+  console.log(`[runService] Próba usunięcia (soft delete) przejazdu o ID: ${runId}`);
+  const sql = 'UPDATE runs SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1';
   const result = await db.query(sql, [runId]);
+  // Zwracamy liczbę zmienionych wierszy. Powinno być 1, jeśli operacja się powiodła.
+  // Return the number of affected rows. Should be 1 on success.
+  console.log(`[runService] Liczba zmienionych wierszy w tabeli 'runs': ${result.rowCount}`);
   return result.rowCount;
 };
+
+// W przyszłości można dodać funkcje do aktualizacji przejazdów.
+// In the future, functions for updating runs can be added.
+// const updateRun = async (runId, runData) => { ... };
 
 module.exports = {
   createRun,

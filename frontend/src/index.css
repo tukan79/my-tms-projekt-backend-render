@@ -668,6 +668,45 @@ h2 {
   cursor: grab;
 }
 
+/* Nowe style dla siatki w PlanItOrders */
+.planit-table-grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.planit-grid-header, .planit-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 2fr 1fr 1.5fr 2fr 1fr 0.8fr 0.8fr; /* Dopasuj do liczby i szerokości kolumn */
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.planit-grid-header {
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background-color: var(--card-background);
+  z-index: 1;
+}
+
+.planit-grid-body {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.planit-grid-row {
+  cursor: grab;
+}
+
+.planit-grid-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Style dla statystyk przejazdu (waga, palety) */
 .run-stats {
   display: flex;
@@ -681,6 +720,42 @@ h2 {
 .highlighted-row {
   background-color: #dbe4ff !important; /* Używamy !important, aby nadpisać inne style tła */
   font-weight: 500;
+}
+
+/* Style dla wskaźników pojemności w przejazdach */
+.run-capacity-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.capacity-indicator {
+  width: 100%;
+}
+
+.capacity-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
+  margin-bottom: 0.25rem;
+}
+
+.capacity-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.capacity-bar {
+  height: 100%;
+  background-color: var(--primary-color);
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
 }
 
 /* Styl dla podręcznego okienka (tooltip) */

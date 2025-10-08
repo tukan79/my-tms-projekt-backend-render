@@ -2,7 +2,7 @@ import React from 'react';
 import { useApiResource } from '../hooks/useApiResource.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import DataTable from './DataTable';
-import { Package, DollarSign, Calendar } from 'lucide-react';
+import { Package, PoundSterling, Calendar } from 'lucide-react';
 
 const isPostcodeInZone = (postcode, zone) => {
   if (!postcode || !zone || !zone.postcode_patterns) {
@@ -48,7 +48,7 @@ const OrderList = ({ items: orders = [], zones = [], onRefresh, onEdit, onDelete
     {
       key: 'final_price',
       header: 'Price',
-      icon: <DollarSign size={16} />,
+      icon: <PoundSterling size={16} />,
       render: (item) => item.final_price ? `£${parseFloat(item.final_price).toFixed(2)}` : '-',
     },
     {

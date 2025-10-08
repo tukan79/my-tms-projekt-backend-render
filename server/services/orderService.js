@@ -27,10 +27,15 @@ const createOrder = async (orderData) => {
   const newOrder = rows[0];
 
   // Po utworzeniu zlecenia, uruchom silnik wyceny
-  const price = await pricingService.calculateOrderPrice(newOrder);
-  if (price !== null) {
-    const updatePriceSql = 'UPDATE orders SET calculated_price = $1, final_price = $1 WHERE id = $2 RETURNING *';
-    const updatedResult = await db.query(updatePriceSql, [price, newOrder.id]);
+  const priceResult = await pricingService.calculateOrderPrice(newOrder);
+  if (priceResult !== null) {
+    const updatedCargoDetails = { ...newOrder.cargo_details, price_breakdown: priceResult.breakdown };
+    const updatePriceSql = `
+      UPDATE orders 
+      SET calculated_price = $1, final_price = $1, cargo_details = $2 
+      WHERE id = $3 RETURNING *
+    `;
+    const updatedResult = await db.query(updatePriceSql, [priceResult.total, JSON.stringify(updatedCargoDetails), newOrder.id]);
     return updatedResult.rows[0];
   }
 
@@ -74,10 +79,15 @@ const updateOrder = async (orderId, orderData) => {
 
   // Po aktualizacji, przelicz cenę, jeśli nie została ona ręcznie zmieniona
   if (final_price === updatedOrder.calculated_price) {
-    const price = await pricingService.calculateOrderPrice(updatedOrder);
-    if (price !== null && price !== updatedOrder.calculated_price) {
-      const updatePriceSql = 'UPDATE orders SET calculated_price = $1, final_price = $1 WHERE id = $2 RETURNING *';
-      const updatedResult = await db.query(updatePriceSql, [price, updatedOrder.id]);
+    const priceResult = await pricingService.calculateOrderPrice(updatedOrder);
+    if (priceResult !== null && priceResult.total !== updatedOrder.calculated_price) {
+      const updatedCargoDetails = { ...updatedOrder.cargo_details, price_breakdown: priceResult.breakdown };
+      const updatePriceSql = `
+        UPDATE orders 
+        SET calculated_price = $1, final_price = $1, cargo_details = $2 
+        WHERE id = $3 RETURNING *
+      `;
+      const updatedResult = await db.query(updatePriceSql, [priceResult.total, JSON.stringify(updatedCargoDetails), updatedOrder.id]);
       return updatedResult.rows[0];
     }
   }
@@ -150,13 +160,14 @@ const importOrders = async (ordersData) => {
       }
 
       // Calculate price before inserting
-      const price = await pricingService.calculateOrderPrice({
+      const priceResult = await pricingService.calculateOrderPrice({
         customer_id: customerId,
         sender_details: order.sender_details,
         recipient_details: order.recipient_details,
         cargo_details: order.cargo_details,
         service_level: order.service_level,
       });
+      const updatedCargoDetails = priceResult ? { ...order.cargo_details, price_breakdown: priceResult.breakdown } : order.cargo_details;
 
       const result = await client.query(sql, [
         customerId,
@@ -165,11 +176,11 @@ const importOrders = async (ordersData) => {
         order.status,
         JSON.stringify(order.sender_details),
         JSON.stringify(order.recipient_details),
-        JSON.stringify(order.cargo_details),
+        JSON.stringify(updatedCargoDetails),
         order.loading_date_time,
         order.unloading_date_time,
         order.service_level,
-        price,
+        priceResult ? priceResult.total : null,
       ]);
 
       if (result.rows.length > 0) {

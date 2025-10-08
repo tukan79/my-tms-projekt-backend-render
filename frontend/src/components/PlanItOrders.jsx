@@ -51,8 +51,8 @@ const PlanItOrders = ({ orders, zones = [], onPopOut }) => {
   const allEnrichedOrders = useMemo(() => {
     return orders.map(order => {
       const cargo = order.cargo_details || {};
-      const totalKilos = cargo.total_kilos || 0;
-      const totalSpaces = Object.values(cargo.pallets || {}).reduce((sum, p) => sum + (Number(p.count) || 0), 0);
+      const totalKilos = cargo.total_kilos || 0; // Używamy istniejącego pola
+      const totalSpaces = cargo.total_spaces || 0; // Używamy nowego pola
       return { ...order, totalKilos, totalSpaces };
     });
   }, [orders]);
@@ -86,8 +86,19 @@ const PlanItOrders = ({ orders, zones = [], onPopOut }) => {
     return allEnrichedOrders;
   }, [activeTab, allEnrichedOrders, zones, dateRange]);
 
-  const handleRowClick = (orderId) => {
-    setSelectedOrderId(prevId => (prevId === orderId ? null : orderId));
+  // Używamy ref, aby przechować czas kliknięcia bez powodowania re-renderów
+  const mouseDownTimeRef = React.useRef(0);
+
+  const handleMouseDown = () => {
+    mouseDownTimeRef.current = Date.now();
+  };
+
+  const handleMouseUp = (orderId) => {
+    const timePressed = Date.now() - mouseDownTimeRef.current;
+    // Uznajemy za kliknięcie, jeśli czas wciśnięcia jest krótszy niż 200ms
+    if (timePressed < 200) {
+      setSelectedOrderId(prevId => (prevId === orderId ? null : orderId));
+    }
   };
 
   const handleMouseEnter = (e, order) => {
@@ -117,48 +128,46 @@ const PlanItOrders = ({ orders, zones = [], onPopOut }) => {
           <button className={`tab-button ${activeTab === 'collections' ? 'active' : ''}`} onClick={() => setActiveTab('collections')}>Collections</button>
         </div>
         <div className="form-group" style={{ margin: '0 0 0 1rem', minWidth: '160px' }}>
-          <label style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>From Date</label>
+          <label style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>From Date</label>
           <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))} />
         </div>
         <div className="form-group" style={{ margin: '0 0 0 1rem', minWidth: '160px' }}>
-          <label style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>To Date</label>
+          <label style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>To Date</label>
           <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))} />
         </div>
       </div>
-      <div className="planit-list">
-        <table className="data-table">
-          <thead>
-            <tr>
-              {columns.map(col => <th key={col.header}>{col.header}</th>)}
-            </tr>
-          </thead>
-          <Droppable droppableId="orders">
-            {(provided) => (
-              <tbody {...provided.droppableProps} ref={provided.innerRef}>
-                {filteredOrders.map((order, index) => (
-                  <Draggable key={order.id} draggableId={String(order.id)} index={index}>
-                    {(provided) => (
-                      <tr
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        className={`planit-draggable-row ${selectedOrderId === order.id ? 'highlighted-row' : ''}`}
-                        onClick={() => handleRowClick(order.id)}
-                        onMouseEnter={(e) => handleMouseEnter(e, order)}
-                        onMouseLeave={handleMouseLeave}
-                      >
-                        {columns.map((col, i) => (
-                          <td key={`${order.id}-${i}`}>{col.accessor(order)}</td>
-                        ))}
-                      </tr>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </tbody>
-            )}
-          </Droppable>
-        </table>
+      <div className="planit-list planit-table-grid">
+        {/* Nagłówek siatki */}
+        <div className="planit-grid-header">
+              {columns.map(col => <div key={col.header}>{col.header}</div>)}
+        </div>
+        <Droppable droppableId="orders">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef} className="planit-grid-body">
+              {filteredOrders.map((order, index) => (
+                <Draggable key={order.id} draggableId={String(order.id)} index={index}>
+                  {(provided) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      className={`planit-grid-row ${selectedOrderId === order.id ? 'highlighted-row' : ''}`}
+                      onMouseDown={handleMouseDown}
+                      onMouseUp={() => handleMouseUp(order.id)}
+                      onMouseEnter={(e) => handleMouseEnter(e, order)}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                      {columns.map((col, i) => (
+                        <div key={`${order.id}-${i}`} className="planit-grid-cell">{col.accessor(order)}</div>
+                      ))}
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
         {tooltip.visible && (
           <div 
             className="tooltip"

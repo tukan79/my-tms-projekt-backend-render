@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApiResource } from '../hooks/useApiResource.js';
 import { useToast } from '../contexts/ToastContext.jsx';
-import { Edit, Trash2, Plus, X, Download, Upload, Database } from 'lucide-react';
+import { Edit, Trash2, Plus, X, Download, Database } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import ZoneImporter from './ZoneImporter.jsx';
 import api from '../services/api.js';
 
 const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
@@ -17,7 +16,6 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
   const { showToast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
-  const [showImporter, setShowImporter] = useState(false);
   const [formData, setFormData] = useState({ zone_name: '', postcode_patterns: '', is_home_zone: false });
 
   useEffect(() => {
@@ -140,13 +138,10 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
   return (
     <div>
       <h4>Postcode Zones</h4>
-      {!isFormOpen && !showImporter && (
+      {!isFormOpen && (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
           <button onClick={() => setIsFormOpen(true)} className="btn-primary">
             <Plus size={16} /> Add New Zone
-          </button>
-          <button onClick={() => setShowImporter(true)} className="btn-secondary">
-            <Upload size={16} /> Import
           </button>
           <button onClick={handleExport} className="btn-secondary">
             <Download size={16} /> Export
@@ -174,10 +169,6 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
             <button type="submit" className="btn-primary">Save Zone</button>
           </div>
         </form>
-      )}
-
-      {showImporter && (
-        <ZoneImporter onSuccess={() => { setShowImporter(false); if (onRefresh) onRefresh(); }} onCancel={() => setShowImporter(false)} />
       )}
 
       <DragDropContext onDragEnd={onDragEnd}>

@@ -74,16 +74,23 @@ const AddOrderForm = ({ onSuccess, onCancel, itemToEdit, clients = [] }) => {
     const { name, value, dataset } = e.target;
     const { palletType, field } = dataset;
 
+    const newPalletData = {
+      ...formData.cargo_details.pallets[palletType],
+      [field]: value ? parseInt(value, 10) : ''
+    };
+
+    // Jeśli użytkownik wpisuje 'count', a 'spaces' jest puste, automatycznie uzupełnij 'spaces'.
+    if (field === 'count' && (newPalletData.spaces === '' || newPalletData.spaces === 0)) {
+      newPalletData.spaces = newPalletData.count;
+    }
+
     setFormData(prev => ({
       ...prev,
       cargo_details: {
         ...prev.cargo_details,
         pallets: {
           ...prev.cargo_details.pallets,
-          [palletType]: {
-            ...prev.cargo_details.pallets[palletType],
-            [field]: value ? parseInt(value, 10) : ''
-          }
+          [palletType]: newPalletData
         },
       }
     }));
@@ -145,6 +152,10 @@ const AddOrderForm = ({ onSuccess, onCancel, itemToEdit, clients = [] }) => {
     const totalKilos = Object.values(formData.cargo_details.pallets).reduce((sum, pallet) => {
       return sum + (Number(pallet.kilos) || 0);
     }, 0);
+    
+    const totalSpaces = Object.values(formData.cargo_details.pallets).reduce((sum, pallet) => {
+      return sum + (Number(pallet.spaces) || 0);
+    }, 0);
 
     const dataToSend = {
       ...formData,
@@ -153,6 +164,7 @@ const AddOrderForm = ({ onSuccess, onCancel, itemToEdit, clients = [] }) => {
       cargo_details: {
         ...formData.cargo_details,
         total_kilos: totalKilos,
+        total_spaces: totalSpaces,
       },
     };
 

@@ -1,19 +1,28 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import PlanItOrders from './PlanItOrders.jsx';
 import PlanItRuns from './PlanItRuns.jsx';
 import PlanItAssignments from './PlanItAssignments.jsx';
 import { useAssignments } from '../hooks/useAssignments.js';
 import { useToast } from '../contexts/ToastContext.jsx';
+import api from '../services/api.js'; // Importujemy bezpośrednio instancję api
 
-const PlanItPage = ({ orders = [], runs = [], assignments: initialAssignments = [], drivers = [], trucks = [], zones = [], onAssignmentCreated, onDelete }) => {
+const PlanItPage = ({ orders = [], runs = [], assignments: initialAssignments = [], drivers = [], trucks = [], trailers = [], zones = [], onAssignmentCreated }) => {
   const { showToast } = useToast();
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Wzbogacamy dane o przejazdach o czytelne etykiety i obliczone sumy
   const enrichedRuns = useMemo(() => {
-    return runs.map(run => {
+    return runs
+      .filter(run => {
+        if (!run.run_date) return false;
+        // Najprostsze i najbezpieczniejsze rozwiązanie: porównujemy daty jako stringi w formacie YYYY-MM-DD.
+        return run.run_date.startsWith(selectedDate);
+      })
+      .map(run => {
       const driver = drivers.find(d => d.id === run.driver_id);
       const truck = trucks.find(t => t.id === run.truck_id);
+      const trailer = run.trailer_id ? trailers.find(t => t.id === run.trailer_id) : null; // Znajdź naczepę
 
       // Znajdź zlecenia przypisane do tego przejazdu
       const assignedOrders = initialAssignments
@@ -28,14 +37,43 @@ const PlanItPage = ({ orders = [], runs = [], assignments: initialAssignments = 
         return sum + palletCount;
       }, 0);
 
+      let maxPayload = null;
+      let maxPallets = null;
+      let hasCapacity = false;
+
+      if (truck?.type_of_truck === 'rigid') {
+        maxPayload = truck.max_payload_kg;
+        maxPallets = truck.pallet_capacity;
+        hasCapacity = true;
+      } else if (truck?.type_of_truck === 'tractor' && trailer) {
+        maxPayload = trailer.max_payload_kg;
+        maxPallets = trailer.max_spaces;
+        hasCapacity = true;
+      }
+
       return {
         ...run,
-        displayText: `${driver ? `${driver.first_name} ${driver.last_name}` : 'No Driver'} - ${truck ? truck.registration_plate : 'No Truck'}`,
+        displayText: `${driver ? `${driver.first_name} ${driver.last_name}` : 'No Driver'} - ${truck ? truck.registration_plate : 'No Truck'} ${trailer ? `+ ${trailer.registration_plate}` : ''}`,
         totalKilos,
         totalPallets,
+        // Dodajemy maksymalne pojemności do obiektu przejazdu
+        maxPayload,
+        maxPallets,
+        hasCapacity, // Nowa flaga do renderowania
       };
     });
-  }, [runs, drivers, trucks, initialAssignments, orders]);
+  }, [runs, drivers, trucks, trailers, initialAssignments, orders, selectedDate]);
+
+  const handleDeleteRun = async (run) => {
+    console.log('[PlanItPage] Wywołano handleDeleteRun dla przejazdu:', run);
+    try {
+      await api.delete(`/api/runs/${run.id}`); // Bezpośrednie wywołanie API
+      showToast(`Run "${run.displayText}" deleted successfully.`, 'success');
+      onAssignmentCreated(); // Odświeżamy wszystkie dane
+    } catch (error) {
+      showToast(error.message || 'Failed to delete run.', 'error');
+    }
+  };
 
   const { 
     assignments, 
@@ -71,7 +109,9 @@ const PlanItPage = ({ orders = [], runs = [], assignments: initialAssignments = 
             <PlanItRuns 
               runs={enrichedRuns} 
               onPopOut={handlePopOut} 
-              onDelete={onDelete} 
+              onDelete={handleDeleteRun} // Upewniamy się, że przekazujemy poprawną funkcję
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
             />
             <PlanItAssignments 
               assignments={assignments} 

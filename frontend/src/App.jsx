@@ -1,10 +1,8 @@
 import React from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { Package, Calendar, Link2, Users, Truck, User, LogOut, Plus, Upload, LayoutDashboard, Settings, ExternalLink, DollarSign, Download } from 'lucide-react';
+import { Package, Link2, Users, Truck, User, LogOut, Plus, Upload, LayoutDashboard, Settings, PoundSterling, Download, MapPin, Briefcase } from 'lucide-react';
 import DriverList from './components/DriverList.jsx';
-import TruckImporter from './components/TruckImporter.jsx';
 import AddDriverForm from './components/AddDriverForm.jsx';
-import TrailerImporter from './components/TrailerImporter.jsx';
 import api from './services/api.js';
 import { DragDropContext } from '@hello-pangea/dnd';
 import TruckList from './components/TruckList.jsx';
@@ -15,25 +13,26 @@ import CustomerList from './components/CustomerList.jsx';
 import AddCustomerForm from './components/AddCustomerForm.jsx';
 import OrderList from './components/OrderList.jsx';
 import AddOrderForm from './components/AddOrderForm.jsx';
-import OrderImporter from './components/OrderImporter.jsx';
 import UserList from './components/UserList.jsx';
-import UserImporter from './components/UserImporter.jsx';
 import AddUserForm from './components/AddUserForm.jsx'; // Corrected path
 import RunManager from './components/RunManager.jsx';
 import PlanItOrders from './components/PlanItOrders.jsx';
 import PricingPage from './components/PricingPage.jsx'; // Corrected path
 import PlanItAssignments from './components/PlanItAssignments.jsx';
 import PlanItPage from './components/PlanItPage.jsx';
-import ErrorBoundary from './components/ErrorBoundary.jsx'; // ✅ Użycie dedykowanego komponentu
-import DriverImporter from './components/DriverImporter.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { useAuth } from './contexts/AuthContext.jsx'; // Ten import jest już poprawny po zmianie w AuthContext.jsx
+import FinancePage from './pages/FinancePage.jsx';
+import ZoneList from './components/ZoneList.jsx';
+import AddZoneForm from './components/AddZoneForm.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
 import { useDashboardState, useDataFetching } from './hooks/useDashboard.js';
 import LoginPage from './pages/LoginPage.jsx';
 import { useBroadcastChannel } from './hooks/useBroadcastChannel.js'; // Corrected path
-import CustomerImporter from './components/CustomerImporter.jsx';
 import { ToastProvider, useToast } from './contexts/ToastContext.jsx';
 import RegisterPage from './pages/RegisterPage';
+import DataImporter from './components/DataImporter.jsx';
+import { importerConfig } from './importerConfig.js';
 
 const getInitials = (user) => {
   if (!user) return '';
@@ -58,9 +57,9 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const {
-    currentView, showForm, itemToEdit, modalState, showImporter, showClientImporter, showDriverImporter, showTruckImporter, showTrailerImporter, showUserImporter,
-    handleViewChange, handleEditClick, handleCancelForm, setShowImporter, setShowTruckImporter, setShowTrailerImporter, setShowUserImporter,
-    handleDeleteRequest, handleCloseModal, setShowForm, setItemToEdit, setShowClientImporter, setShowDriverImporter
+    currentView, showForm, itemToEdit, modalState, importerConfig: activeImporterConfig,
+    handleViewChange, handleEditClick, handleCancelForm, handleShowImporter, handleHideImporter,
+    handleDeleteRequest, handleCloseModal, setShowForm, setItemToEdit
   } = useDashboardState();
 
   const { data, isLoading, anyError, handleRefresh: refreshData, refreshAll } = useDataFetching();
@@ -74,7 +73,9 @@ const Dashboard = () => {
     runs: 'run',
     users: 'user',
     customers: 'customer',
+    zones: 'zone',
     planit: 'PlanIt', // Poprawiono brakujący przecinek
+    finance: 'Finance',
     pricing: 'Pricing',
   };
 
@@ -102,9 +103,10 @@ const Dashboard = () => {
   // Konfiguracja widoków, aby uniknąć dużego bloku switch.
   // View configuration to avoid a large switch block.
   const viewConfig = {
-    // Nowy widok do zarządzania przejazdami
+    // Widoki, które są pojedynczymi komponentami
     runs: { Component: RunManager, props: { trucks, trailers, drivers, onDataRefresh: refreshAll } },
-    planit: { Component: PlanItPage, props: { orders, runs, assignments, drivers, trucks, trailers, zones, onAssignmentCreated: refreshAll, onEdit: handleEditClick, onDelete: handleDeleteRequest } },
+    planit: { Component: PlanItPage, props: { orders, runs, assignments, drivers, trucks, trailers, zones, onAssignmentCreated: refreshAll, onEdit: handleEditClick } },
+    finance: { Component: FinancePage, props: { orders, customers } },
     pricing: { Component: PricingPage, props: { customers, zones, onRefresh: refreshAll } },
     // Widoki dostępne tylko dla admina.
     // Views available only for admin.
@@ -113,7 +115,8 @@ const Dashboard = () => {
       trucks: { ListComponent: TruckList, FormComponent: AddTruckForm, data: trucks },
       customers: { ListComponent: CustomerList, FormComponent: AddCustomerForm, data: customers },
       trailers: { ListComponent: TrailerList, FormComponent: AddTrailerForm, data: trailers },
-      users: { ListComponent: UserList, FormComponent: AddUserForm, data: users }
+      users: { ListComponent: UserList, FormComponent: AddUserForm, data: users },
+      zones: { ListComponent: ZoneList, FormComponent: AddZoneForm, data: zones },
     }),
     // Widoki dostępne dla admina i dyspozytora.
     // Views available for admin and dispatcher.
@@ -150,22 +153,11 @@ const Dashboard = () => {
       );
     }
 
-    const importerConfig = {
-      orders: { show: showImporter, Component: OrderImporter, onCancel: () => setShowImporter(false) },
-      customers: { show: showClientImporter, Component: CustomerImporter, onCancel: () => setShowClientImporter(false) },
-      drivers: { show: showDriverImporter, Component: DriverImporter, onCancel: () => setShowDriverImporter(false) },
-      trucks: { show: showTruckImporter, Component: TruckImporter, onCancel: () => setShowTruckImporter(false) },
-      trailers: { show: showTrailerImporter, Component: TrailerImporter, onCancel: () => setShowTrailerImporter(false) },
-      users: { show: showUserImporter, Component: UserImporter, onCancel: () => setShowUserImporter(false) },
-    };
-
-    const activeImporter = importerConfig[currentView];
-
     // Widoki z listą i formularzem.
     // Views with a list and a form.
     if (currentViewConfig.ListComponent) {
-      if (activeImporter && activeImporter.show) {
-        return <ErrorBoundary onReset={handleRefresh}><activeImporter.Component onSuccess={handleFormSuccess} onCancel={activeImporter.onCancel} /></ErrorBoundary>;
+      if (activeImporterConfig) {
+        return <ErrorBoundary onReset={handleRefresh}><DataImporter {...activeImporterConfig} onSuccess={handleFormSuccess} onCancel={handleHideImporter} /></ErrorBoundary>;
       }
 
       if (showForm) {
@@ -205,6 +197,11 @@ const Dashboard = () => {
       ]
     },
     {
+      title: 'Finance',
+      icon: <Briefcase size={16} />,
+      links: [{ view: 'finance', label: 'Finance', icon: <Briefcase size={18} />, roles: ['admin'] }]
+    },
+    {
       title: 'Management',
       icon: <Settings size={16} />,
       links: [
@@ -212,7 +209,7 @@ const Dashboard = () => {
         { view: 'trucks', label: 'Vehicles', icon: <Truck size={18} />, roles: ['admin'] },
         { view: 'trailers', label: 'Trailers', icon: <Truck size={18} style={{ transform: 'scaleX(-1)' }} />, roles: ['admin'] },
         { view: 'customers', label: 'Customers', icon: <Users size={18} />, roles: ['admin'] },
-        { view: 'users', label: 'Users', icon: <Users size={18} />, roles: ['admin'] },
+        { view: 'users', label: 'Users', icon: <Users size={18} />, roles: ['admin'] }
       ]
     },
     {
@@ -223,7 +220,10 @@ const Dashboard = () => {
     {
       title: 'Settings',
       icon: <Settings size={16} />,
-      links: [{ view: 'pricing', label: 'Pricing', icon: <DollarSign size={18} />, roles: ['admin'] }]
+      links: [
+        { view: 'pricing', label: 'Pricing', icon: <PoundSterling size={18} />, roles: ['admin'] },
+        { view: 'zones', label: 'Zones', icon: <MapPin size={18} />, roles: ['admin'] }
+      ]
     }
   ];
 
@@ -279,33 +279,8 @@ const Dashboard = () => {
           {/* Empty div for alignment. */}
           <div /> 
           <div className="main-header-actions">
-             {currentView === 'orders' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowImporter(true)} className="btn-secondary" disabled={isLoading}>
-                <Upload size={16} /> Import from CSV
-              </button>
-            )}
-            {currentView === 'customers' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowClientImporter(true)} className="btn-secondary" disabled={isLoading}>
-                <Upload size={16} /> Import from CSV
-              </button>
-            )}
-            {currentView === 'drivers' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowDriverImporter(true)} className="btn-secondary" disabled={isLoading}>
-                <Upload size={16} /> Import from CSV
-              </button>
-            )}
-            {currentView === 'trucks' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowTruckImporter(true)} className="btn-secondary" disabled={isLoading}>
-                <Upload size={16} /> Import from CSV
-              </button>
-            )}
-            {currentView === 'trailers' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowTrailerImporter(true)} className="btn-secondary" disabled={isLoading}>
-                <Upload size={16} /> Import from CSV
-              </button>
-            )}
-            {currentView === 'users' && user?.role === 'admin' && !showForm && (
-              <button onClick={() => setShowUserImporter(true)} className="btn-secondary" disabled={isLoading}>
+            {importerConfig[currentView] && user?.role === 'admin' && !showForm && !activeImporterConfig && (
+              <button onClick={() => handleShowImporter(currentView)} className="btn-secondary" disabled={isLoading}>
                 <Upload size={16} /> Import from CSV
               </button>
             )}
@@ -322,12 +297,7 @@ const Dashboard = () => {
                   } else {
                     setItemToEdit(null);
                     setShowForm(true);
-                    setShowClientImporter(false);
-                    setShowDriverImporter(false);
-                    setShowTruckImporter(false);
-                    setShowUserImporter(false);
-                    setShowTrailerImporter(false);
-                    setShowImporter(false);
+                    handleHideImporter();
                   }
                 }}
                 className="btn-primary"

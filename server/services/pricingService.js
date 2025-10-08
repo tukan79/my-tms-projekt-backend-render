@@ -1,22 +1,39 @@
 // Plik server/services/pricingService.js
 const db = require('../db/index.js');
 
+// Stałe dla typów stawek i poziomów usług
+const RATE_TYPES = {
+  COLLECTION: 'collection',
+  DELIVERY: 'delivery',
+};
+
+const SERVICE_LEVELS = {
+  SATURDAY: 'D',
+  STANDARD: 'S',
+};
+
 /**
  * Finds a postcode zone that matches a given postcode.
  * @param {string} postcode - The postcode to match.
  * @returns {Promise<object|null>} The matching zone object or null.
  */
 const findZoneForPostcode = async (postcode) => {
-  if (!postcode) return null;
-  // This query checks if the postcode starts with any of the patterns in the array.
-  const { rows } = await db.query(
-    `SELECT * FROM postcode_zones WHERE EXISTS (
-      SELECT 1 FROM unnest(postcode_patterns) AS pattern
-      WHERE $1 ILIKE pattern
-    ) LIMIT 1`,
-    [postcode]
-  );
-  return rows[0] || null;
+  if (!postcode || typeof postcode !== 'string') return null;
+  
+  try {
+    const { rows } = await db.query(
+      `SELECT * FROM postcode_zones WHERE EXISTS (
+        SELECT 1 FROM unnest(postcode_patterns) AS pattern
+        WHERE $1 ILIKE pattern
+      ) LIMIT 1`,
+      [postcode]
+    );
+    console.log(`Zone search for postcode ${postcode}: found ${rows.length} zones`);
+    return rows[0] || null;
+  } catch (error) {
+    console.error(`Error finding zone for postcode ${postcode}:`, error.message);
+    return null;
+  }
 };
 
 /**
@@ -25,113 +42,201 @@ const findZoneForPostcode = async (postcode) => {
  * @param {string} rateType - 'collection' or 'delivery'.
  * @param {number} zoneId - The ID of the zone for which the rate is being calculated.
  * @param {object} order - The order object containing service level and pallet details.
- * @returns {Promise<number>} The calculated price for the leg.
+ * @returns {Promise<{total: number, breakdown: object}>} The calculated price for the leg with breakdown.
  */
 const findRateForLeg = async (rateCardId, rateType, zoneId, order) => {
-  const query = `
-    SELECT * FROM rate_entries
-    WHERE rate_card_id = $1 AND rate_type = $2 AND zone_id = $3 AND service_level = $4
-  `;
-  const { rows } = await db.query(query, [rateCardId, rateType, zoneId, order.service_level]);
+  console.log(`\n=== findRateForLeg START ===`);
+  console.log(`Params: rateCardId=${rateCardId}, rateType=${rateType}, zoneId=${zoneId}, serviceLevel=${order.service_level}`);
+  
+  try {
+    const query = `
+      SELECT * FROM rate_entries
+      WHERE rate_card_id = $1 AND rate_type = $2 AND zone_id = $3 AND service_level = $4
+    `;
+    console.log(`Query: ${query}`);
+    
+    const { rows } = await db.query(query, [rateCardId, rateType, zoneId, order.service_level]);
+    console.log(`Found ${rows.length} rate entries in database`);
 
-  if (rows.length === 0) {
-    // Log zostanie teraz wygenerowany w `calculateOrderPrice` z nazwą strefy
-    return 0;
-  }
-  const rate = rows[0];
-  let legPrice = 0;
-  const pallets = order.cargo_details?.pallets || {};
-
-  const palletPriceMap = {
-    micro: 'price_micro', quarter: 'price_quarter', half: 'price_half', plus_half: 'price_half_plus',
-  };
-
-  for (const type in palletPriceMap) {
-    if (pallets[type] && Number(pallets[type].count) > 0) {
-      legPrice += (parseFloat(rate[palletPriceMap[type]]) || 0) * Number(pallets[type].count);
+    const priceBreakdown = {};
+    if (rows.length === 0) {
+      console.warn(`❌ No rate entries found for the given criteria`);
+      return { total: 0, breakdown: {} };
     }
-  }
+    
+    const rate = rows[0];
+    console.log(`Rate entry found:`, {
+      id: rate.id,
+      price_full_1: rate.price_full_1,
+      price_half: rate.price_half,
+      price_quarter: rate.price_quarter,
+      price_micro: rate.price_micro
+    });
 
-  const fullPalletCount = Number(pallets.full?.count || 0);
-  if (fullPalletCount > 0) {
-    if (fullPalletCount <= 10) {
-      // Użyj indywidualnych cen dla 1 do 10 palet
-      legPrice += parseFloat(rate[`price_full_${fullPalletCount}`]) || 0;
-    } else {
-      // Dla palet powyżej 10, można dodać osobną logikę, na razie cena za 10 palet
-      legPrice += parseFloat(rate.price_full_10) || 0;
+    const pallets = order.cargo_details?.pallets || {};
+    console.log(`Pallets from order:`, JSON.stringify(pallets, null, 2));
+
+    // Zmieniamy logikę, aby zawsze liczyć na podstawie 'spaces'
+    const palletPriceMap = {
+      micro: 'price_micro', 
+      quarter: 'price_quarter', 
+      half: 'price_half', 
+      plus_half: 'price_half_plus',
+      full: 'price_full_1', // Dla pełnych palet używamy stawki za jedną paletę jako bazę
+    };
+
+    // Calculate prices for each pallet type
+    for (const type in palletPriceMap) {
+      // ZAWSZE używamy 'spaces' do obliczeń
+      const spaces = Number(pallets[type]?.spaces || 0);
+      if (spaces > 0) {
+        const priceColumn = palletPriceMap[type];
+        const price = parseFloat(rate[priceColumn]) || 0;
+        priceBreakdown[type] = price * spaces;
+        
+        console.log(`📦 ${type}: ${spaces} spaces x £${price} = £${priceBreakdown[type]}`);
+      }
     }
+
+    const total = Object.values(priceBreakdown).reduce((sum, price) => sum + price, 0);
+    console.log(`💰 Total for leg: £${total}`);
+    console.log(`=== findRateForLeg END ===\n`);
+
+    return { total, breakdown: priceBreakdown };
+  } catch (error) {
+    console.error(`❌ Error in findRateForLeg:`, { 
+      rateCardId, 
+      rateType, 
+      zoneId, 
+      serviceLevel: order.service_level, 
+      error: error.message 
+    });
   }
-  return legPrice;
+  return { total: 0, breakdown: {} };
 };
 
 /**
  * Calculates the price for a given order based on client's rate card.
  * @param {object} order - The full order object.
- * @returns {Promise<number|null>} The calculated price or null if no rate is found.
+ * @returns {Promise<{total: number, breakdown: object}|null>} The calculated price with breakdown or null.
  */
 const calculateOrderPrice = async (order) => {
+  console.log(`\n🎯 STARTING PRICE CALCULATION FOR ORDER ${order.id || 'new'}`);
+  console.log(`Order details:`, {
+    customer_id: order.customer_id,
+    service_level: order.service_level,
+    sender_postcode: order.sender_details?.postCode,
+    recipient_postcode: order.recipient_details?.postCode,
+    pallets: order.cargo_details?.pallets
+  });
+
   if (!order.customer_id || !order.sender_details?.postCode || !order.recipient_details?.postCode) {
-    console.warn(`Order ${order.id || 'new'} is missing customer_id or postcodes. Skipping price calculation.`);
+    console.warn(`❌ Order ${order.id || 'new'} is missing required fields`);
     return null;
   }
 
   // 1. Find source and destination zones
+  console.log(`🔍 Finding zones...`);
   const sourceZone = await findZoneForPostcode(order.sender_details.postCode);
   const destinationZone = await findZoneForPostcode(order.recipient_details.postCode);
 
+  console.log(`Zones found:`, {
+    sourceZone: sourceZone ? `${sourceZone.zone_name} (ID: ${sourceZone.id}, is_home_zone: ${sourceZone.is_home_zone})` : 'NOT FOUND',
+    destinationZone: destinationZone ? `${destinationZone.zone_name} (ID: ${destinationZone.id}, is_home_zone: ${destinationZone.is_home_zone})` : 'NOT FOUND'
+  });
+
   if (!sourceZone || !destinationZone) {
-    console.warn(`Could not determine zones for order ${order.id || 'new'}. Source: ${sourceZone?.zone_name || 'not found'}, Dest: ${destinationZone?.zone_name || 'not found'}`);
+    console.warn(`❌ Could not determine zones for order ${order.id || 'new'}`);
     return null;
   }
 
   // 2. Find the rate card assigned to the client
+  console.log(`🔍 Finding rate card for customer ${order.customer_id}...`);
   const { rows: rateCards } = await db.query(
     'SELECT rate_card_id as id FROM customer_rate_card_assignments WHERE customer_id = $1 LIMIT 1',
     [order.customer_id]
   );
+  
+  console.log(`Rate cards found: ${rateCards.length}`);
   if (rateCards.length === 0) {
-    console.warn(`No rate card assigned to client ${order.customer_id}.`);
+    console.warn(`❌ No rate card assigned to client ${order.customer_id}`);
     return null;
   }
+  
   const rateCardId = rateCards[0].id;
+  console.log(`✅ Using rate card ID: ${rateCardId}`);
 
   // 3. Calculate price based on the scenario
-  let totalPrice = 0;
+  let finalPrice = { total: 0, breakdown: {} };
   const isStandardCollection = sourceZone.is_home_zone && !destinationZone.is_home_zone;
   const isStandardDelivery = !sourceZone.is_home_zone && destinationZone.is_home_zone;
   const isPointToPoint = !sourceZone.is_home_zone && !destinationZone.is_home_zone;
   const isLocal = sourceZone.is_home_zone && destinationZone.is_home_zone;
 
+  console.log(`📊 Scenario analysis:`, {
+    isStandardCollection,
+    isStandardDelivery, 
+    isPointToPoint,
+    isLocal
+  });
+
   if (isStandardCollection) {
-    // Standard: We collect, so we only charge for delivery to the destination zone.
-    const legPrice = await findRateForLeg(rateCardId, 'delivery', destinationZone.id, order);
-    if (legPrice === 0) console.warn(`No rate entry for delivery to zone '${destinationZone.zone_name}' (ID: ${destinationZone.id}) with service '${order.service_level}' in rate card ${rateCardId}.`);
-    totalPrice = legPrice;
+    console.log(`🚚 Scenario: STANDARD COLLECTION`);
+    const legPrice = await findRateForLeg(rateCardId, RATE_TYPES.DELIVERY, destinationZone.id, order);
+    if (legPrice.total === 0) console.warn(`⚠️ No rate entry for delivery to zone '${destinationZone.zone_name}'`);
+    finalPrice = legPrice;
   } else if (isStandardDelivery) {
-    // Standard: We deliver, so we only charge for collection from the source zone.
-    const legPrice = await findRateForLeg(rateCardId, 'collection', sourceZone.id, order);
-    if (legPrice === 0) console.warn(`No rate entry for collection from zone '${sourceZone.zone_name}' (ID: ${sourceZone.id}) with service '${order.service_level}' in rate card ${rateCardId}.`);
-    totalPrice = legPrice;
+    console.log(`🚛 Scenario: STANDARD DELIVERY`);
+    const legPrice = await findRateForLeg(rateCardId, RATE_TYPES.COLLECTION, sourceZone.id, order);
+    if (legPrice.total === 0) console.warn(`⚠️ No rate entry for collection from zone '${sourceZone.zone_name}'`);
+    finalPrice = legPrice;
   } else if (isLocal) {
-    // Local: Both start and end are in a home zone. Charge for the delivery leg.
-    const legPrice = await findRateForLeg(rateCardId, 'delivery', destinationZone.id, order);
-    if (legPrice === 0) console.warn(`No rate entry for local delivery to zone '${destinationZone.zone_name}' (ID: ${destinationZone.id}) with service '${order.service_level}' in rate card ${rateCardId}.`);
-    totalPrice = legPrice;
+    console.log(`🏠 Scenario: LOCAL DELIVERY`);
+    const legPrice = await findRateForLeg(rateCardId, RATE_TYPES.DELIVERY, destinationZone.id, order);
+    if (legPrice.total === 0) console.warn(`⚠️ No rate entry for local delivery to zone '${destinationZone.zone_name}'`);
+    finalPrice = legPrice;
   } else if (isPointToPoint) {
-    // Point to Point: Charge for both collection and delivery.
-    const collectionPrice = await findRateForLeg(rateCardId, 'collection', sourceZone.id, order);
-    const deliveryPrice = await findRateForLeg(rateCardId, 'delivery', destinationZone.id, order);
-    totalPrice = collectionPrice + deliveryPrice;
+    console.log(`🔀 Scenario: POINT TO POINT`);
+    const collectionPrice = await findRateForLeg(rateCardId, RATE_TYPES.COLLECTION, sourceZone.id, order);
+    const deliveryPrice = await findRateForLeg(rateCardId, RATE_TYPES.DELIVERY, destinationZone.id, order);
+
+    const combinedBreakdown = { ...collectionPrice.breakdown };
+    for (const type in deliveryPrice.breakdown) {
+      combinedBreakdown[type] = (combinedBreakdown[type] || 0) + deliveryPrice.breakdown[type];
+    }
+
+    finalPrice = {
+      total: collectionPrice.total + deliveryPrice.total,
+      breakdown: combinedBreakdown,
+    };
   }
-  // If sourceZone and destinationZone are both home_zone, price remains 0.
+
+  console.log(`📦 Final price before surcharges: £${finalPrice.total}`);
+  console.log(`Breakdown:`, JSON.stringify(finalPrice.breakdown, null, 2));
 
   // 4. Add surcharges (e.g., for Saturday service)
-  if (order.service_level === 'D') { // Assuming 'D' is Saturday
-    totalPrice += 40.00;
+  if (order.service_level === SERVICE_LEVELS.SATURDAY) {
+    console.log(`➕ Adding Saturday surcharge: £40.00`);
+    finalPrice.total += 40.00;
+    finalPrice.breakdown.surcharge = (finalPrice.breakdown.surcharge || 0) + 40.00;
   }
 
-  return totalPrice > 0 ? totalPrice.toFixed(2) : null;
+  if (finalPrice.total <= 0) {
+    console.warn(`❌ Final price is £0 or negative: £${finalPrice.total}`);
+    return null;
+  }
+
+  const result = {
+    total: parseFloat(finalPrice.total.toFixed(2)),
+    breakdown: finalPrice.breakdown,
+    currency: 'GBP',
+  };
+
+  console.log(`✅ FINAL RESULT: £${result.total}`);
+  console.log(`FINAL BREAKDOWN:`, JSON.stringify(result.breakdown, null, 2));
+  console.log(`🎯 PRICE CALCULATION COMPLETE\n`);
+
+  return result;
 };
 
 module.exports = { calculateOrderPrice };

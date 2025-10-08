@@ -2,8 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useApiResource } from '../hooks/useApiResource';
 import { useToast } from '../contexts/ToastContext';
+import api from '../services/api.js';
 
-const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
+const RunManager = ({ trucks = [], trailers = [], drivers = [], onDataRefresh }) => {
   const { 
     data: runs, 
     error: apiError, 
@@ -18,6 +19,7 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
     trailer_id: '',
     driver_id: '',
   });
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const { showToast } = useToast();
 
   const handleChange = (e) => {
@@ -40,6 +42,7 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
       });
       showToast('Run created successfully!', 'success');
       // Reset form partially
+      if (onDataRefresh) onDataRefresh();
       setFormData(prev => ({ ...prev, truck_id: '', trailer_id: '', driver_id: '' }));
     } catch (error) {
       const errorMessage = error.response?.data?.error || 'An error occurred while creating the run.';
@@ -50,8 +53,10 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
   const handleDeleteRun = async (runId) => {
     if (!window.confirm('Are you sure you want to delete this run? This action cannot be undone.')) return;
     try {
-      await deleteRunApi(runId);
+      // Bezpośrednie wywołanie API zamiast polegania na optymistycznej aktualizacji hooka
+      await api.delete(`/api/runs/${runId}`);
       showToast('Run deleted successfully!', 'success');
+      if (onDataRefresh) onDataRefresh(); // Odśwież dane w całej aplikacji PO udanej operacji
     } catch (error) {
       const errorMessage = error.response?.data?.error || 'An error occurred while deleting the run.';
       showToast(errorMessage, 'error');
@@ -59,17 +64,24 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
   };
 
   const enrichedRuns = useMemo(() => 
-    (Array.isArray(runs) ? runs : []).map(run => {
-      const truck = trucks.find(t => t.id === run.truck_id);
-      const trailer = trailers.find(t => t.id === run.trailer_id);
-      const driver = drivers.find(d => d.id === run.driver_id);
-      return {
-        ...run,
-        truck_info: truck ? `${truck.brand} (${truck.registration_plate})` : 'N/A',
-        trailer_info: trailer ? `${trailer.brand} (${trailer.registration_plate})` : 'N/A',
-        driver_name: driver ? `${driver.first_name} ${driver.last_name}` : 'N/A'
-      };
-    }), [runs, trucks, trailers, drivers]);
+    (Array.isArray(runs) ? runs : [])
+      .filter(run => {
+        // Najprostsze i najbezpieczniejsze rozwiązanie: porównujemy daty jako stringi w formacie YYYY-MM-DD.
+        return run.run_date && run.run_date.startsWith(filterDate);
+      })
+      .map(run => {
+        const truck = trucks.find(t => t.id === run.truck_id);
+        const trailer = trailers.find(t => t.id === run.trailer_id);
+        const driver = drivers.find(d => d.id === run.driver_id);
+        
+        return {
+          ...run,
+          truck_info: truck ? `${truck.brand} (${truck.registration_plate})` : 'N/A',
+          trailer_info: trailer ? `${trailer.brand} (${trailer.registration_plate})` : 'N/A',
+          driver_name: driver ? `${driver.first_name} ${driver.last_name}` : 'N/A'
+        };
+      }), 
+  [runs, trucks, trailers, drivers, filterDate]);
 
   return (
     <div className="card">
@@ -85,7 +97,12 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
         <button onClick={handleCreateRun} className="btn-primary">Create Run</button>
       </div>
 
-      <h3>Planned Runs</h3>
+      <div className="planit-section-header" style={{ padding: '0 0 1rem 0', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+        <h3>Planned Runs</h3>
+        <div className="form-group" style={{ margin: 0, minWidth: '160px' }}>
+          <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+        </div>
+      </div>
       <div className="list">
         {enrichedRuns.length > 0 ? (
           <table className="data-table">
@@ -103,7 +120,12 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
             <tbody>
               {enrichedRuns.map(run => (
                 <tr key={run.id}>
-                  <td>{new Date(run.run_date).toLocaleDateString()}</td>
+                  <td>
+                    {
+                      // Bezpieczne formatowanie daty: bierzemy string YYYY-MM-DD i konwertujemy na DD/MM/YYYY
+                      run.run_date.substring(0, 10).split('-').reverse().join('/')
+                    }
+                  </td>
                   <td style={{ textTransform: 'capitalize' }}>{run.type}</td>
                   <td>{run.driver_name}</td>
                   <td>{run.truck_info}</td>
@@ -119,7 +141,7 @@ const RunManager = ({ trucks = [], trailers = [], drivers = [] }) => {
             </tbody>
           </table>
         ) : (
-          <p>No planned runs.</p>
+          <p>No planned runs for selected date.</p>
         )}
       </div>
     </div>

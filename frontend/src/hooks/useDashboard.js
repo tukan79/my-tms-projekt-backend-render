@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useApiResource } from './useApiResource';
 import { useBroadcastChannel } from './useBroadcastChannel.js';
+import { importerConfig } from '../importerConfig.js';
 
 /**
  * Manages the UI state of the dashboard, including the current view,
@@ -13,12 +14,7 @@ export const useDashboardState = () => {
   const [currentView, setCurrentView] = useState('orders');
   const [showForm, setShowForm] = useState(false);
   const [itemToEdit, setItemToEdit] = useState(null);
-  const [showImporter, setShowImporter] = useState(false);
-  const [showClientImporter, setShowClientImporter] = useState(false);
-  const [showTruckImporter, setShowTruckImporter] = useState(false);
-  const [showTrailerImporter, setShowTrailerImporter] = useState(false);
-  const [showUserImporter, setShowUserImporter] = useState(false);
-  const [showDriverImporter, setShowDriverImporter] = useState(false);
+  const [activeImporterConfig, setActiveImporterConfig] = useState(null);
   const [modalState, setModalState] = useState({
     isOpen: false,
     message: '',
@@ -28,23 +24,13 @@ export const useDashboardState = () => {
   const handleViewChange = (view) => {
     setCurrentView(view);
     setShowForm(false);
-    setShowImporter(false);
-    setShowClientImporter(false);
-    setShowUserImporter(false);
-    setShowTrailerImporter(false);
-    setShowTruckImporter(false);
-    setShowDriverImporter(false);
+    setActiveImporterConfig(null);
     setItemToEdit(null);
   };
 
   const handleEditClick = (item) => {
     setItemToEdit(item);
-    setShowImporter(false);
-    setShowClientImporter(false);
-    setShowUserImporter(false);
-    setShowTrailerImporter(false);
-    setShowTruckImporter(false);
-    setShowDriverImporter(false);
+    setActiveImporterConfig(null);
     setShowForm(true);
   };
 
@@ -52,6 +38,9 @@ export const useDashboardState = () => {
     setShowForm(false);
     setItemToEdit(null);
   };
+
+  const handleShowImporter = (view) => setActiveImporterConfig(importerConfig[view]);
+  const handleHideImporter = () => setActiveImporterConfig(null);
 
   const handleDeleteRequest = (message, confirmCallback) => {
     setModalState({
@@ -72,25 +61,16 @@ export const useDashboardState = () => {
     currentView,
     showForm,
     itemToEdit,
-    showImporter,
-    showClientImporter,
-    showTruckImporter,
-    showUserImporter,
-    showTrailerImporter,
-    showDriverImporter,
+    importerConfig: activeImporterConfig,
     modalState,
     handleViewChange,
     handleEditClick,
     handleCancelForm,
+    handleShowImporter,
+    handleHideImporter,
     handleDeleteRequest,
     handleCloseModal,
-    setShowImporter,
     setShowForm,
-    setShowUserImporter,
-    setShowTrailerImporter,
-    setShowTruckImporter,
-    setShowClientImporter,
-    setShowDriverImporter,
     setItemToEdit,
   };
 };
