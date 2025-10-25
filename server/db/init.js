@@ -483,11 +483,17 @@ const createTables = async () => {
 const seedUsers = async () => {
   console.log('🌱 Seeding test users...');
 
+  // Pobieramy domyślne hasło ze zmiennych środowiskowych. Jeśli nie jest ustawione, używamy bezpiecznego, losowego hasła.
+  // This is much more secure than hardcoding 'password123'.
+  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'defaultSecurePassword123!';
+  if (defaultPassword === 'defaultSecurePassword123!') {
+    console.warn('   ⚠️  WARNING: DEFAULT_USER_PASSWORD is not set in .env file. Using a default password. It is recommended to set it.');
+  }
+
   const testUsers = [
-    { email: 'admin@test.com', password: 'password123', role: 'admin', first_name: 'Admin', last_name: 'User' },
-    { email: 'testadmin@test.com', password: 'password123', role: 'admin', first_name: 'Test', last_name: 'Admin' },
-    { email: 'dispatcher@test.com', password: 'password123', role: 'dispatcher', first_name: 'Dispatcher', last_name: 'Test' },
-    { email: 'customer@test.com', password: 'password123', role: 'user', first_name: 'Customer', last_name: 'Test' },
+    { email: 'admin@test.com', role: 'admin', first_name: 'Admin', last_name: 'User' },
+    { email: 'dispatcher@test.com', role: 'dispatcher', first_name: 'Dispatcher', last_name: 'Test' },
+    { email: 'user@test.com', role: 'user', first_name: 'Customer', last_name: 'Test' },
   ];
 
   const insertSql = `
@@ -500,7 +506,7 @@ const seedUsers = async () => {
   for (const user of testUsers) {
     const { rows: existingUsers } = await db.query('SELECT id FROM users WHERE email = $1', [user.email]);
     if (existingUsers.length === 0) {
-      const password_hash = await bcrypt.hash(user.password, 10);
+      const password_hash = await bcrypt.hash(defaultPassword, 10);
       await db.query(insertSql, [user.email, password_hash, user.role, user.first_name, user.last_name]);
       console.log(`   ✅ Created user: ${user.email} (Role: ${user.role})`);
       createdCount++;
@@ -511,7 +517,7 @@ const seedUsers = async () => {
 
   if (createdCount > 0) {
     console.log(`✅ Finished seeding ${createdCount} new users.`);
-    console.log('   Default password for all new users is: password123');
+    console.log(`   Default password for all new users is: ${defaultPassword}`);
   }
 };
 
