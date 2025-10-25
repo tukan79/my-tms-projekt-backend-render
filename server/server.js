@@ -1,9 +1,4 @@
  // Plik server/server.js - Główny plik startowy serwera
- const dotenv = require('dotenv');
- 
- // Ładujemy zmienne środowiskowe z pliku .env, jeśli istnieje.
- dotenv.config();
- 
  const app = require('./app');
  
  // Używamy bardziej specyficznej zmiennej, aby uniknąć konfliktów z globalnym `PORT`

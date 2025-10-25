@@ -12,7 +12,7 @@
     "server": "npm run dev --workspace=server",
     "client": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
-    "start": "npm start --workspace=server",
+    "start": "npm run start --workspace=server",
     "clean": "rimraf node_modules server/node_modules frontend/node_modules",
     "db:init": "node server/db/init.js"
   },

@@ -1,10 +1,6 @@
 // Plik server/db/init.js - Skrypt do inicjalizacji bazy danych
-const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const db = require('./index');
-
-// Ładujemy zmienne środowiskowe z pliku .env w katalogu server
-dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 const dropAllTables = async () => {
   console.log('🧹 Czyszczenie istniejących tabel i obiektów zależnych...');
