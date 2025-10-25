@@ -30,13 +30,12 @@ const db = require('./db');
 
 const app = express();
 
+// Middleware do parsowania ciasteczek musi być przed CORS, jeśli używasz credentials
+app.use(cookieParser());
+
 // --- Middleware bezpieczeństwa ---
 app.use(helmet()); // Ustawia bezpieczne nagłówki HTTP
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://192.168.3.1:5173',
-];
 app.use(cors({
   origin: (origin, callback) => {
     // Pozwalamy na żądania bez 'origin' (np. z Postmana, cURL) oraz z dozwolonych adresów.
@@ -47,6 +46,7 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
+  credentials: true, // Pozwala na przesyłanie danych uwierzytelniających (np. ciasteczek)
 }));
 
 // Ogranicznik żądań, aby chronić przed atakami brute-force
