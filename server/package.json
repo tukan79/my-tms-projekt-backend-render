@@ -4,7 +4,7 @@
   "description": "Backend for the TMS application",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --node-options=--no-warnings --env-file=.env server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:init": "node db/init.js",
     "dev": "nodemon --config nodemon.json server.js"
