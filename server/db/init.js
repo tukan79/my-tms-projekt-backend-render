@@ -484,9 +484,9 @@ const seedUsers = async () => {
 
   // Pobieramy domyślne hasło ze zmiennych środowiskowych. Jeśli nie jest ustawione, używamy bezpiecznego, losowego hasła.
   // This is much more secure than hardcoding 'password123'.
-  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'defaultSecurePassword123!';
-  if (defaultPassword === 'defaultSecurePassword123!') {
-    console.warn('   ⚠️  WARNING: DEFAULT_USER_PASSWORD is not set in .env file. Using a default password. It is recommended to set it.');
+  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'password123';
+  if (!process.env.DEFAULT_USER_PASSWORD) {
+    console.warn('   ⚠️  WARNING: DEFAULT_USER_PASSWORD is not set in .env file. Using "password123" as a fallback for test users.');
   }
 
   const testUsers = [

@@ -30,6 +30,14 @@ const db = require('./db');
 
 const app = express();
 
+// Definiujemy listę dozwolonych źródeł (origins) dla zapytań CORS.
+// Jest to kluczowe dla bezpieczeństwa, aby serwer akceptował żądania tylko z zaufanych adresów.
+const allowedOrigins = [
+  'http://localhost:5173', // Domyślny adres serwera deweloperskiego Vite
+  'http://127.0.0.1:5173',
+  // W przyszłości można dodać tutaj adres produkcyjny frontendu
+];
+
 // Middleware do parsowania ciasteczek musi być przed CORS, jeśli używasz credentials
 app.use(cookieParser());
 
