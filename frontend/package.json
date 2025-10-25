@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -18,7 +18,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.25.1",
     "@hello-pangea/dnd": "^16.6.0",
-    "react-resizable-panels": "^2.0.20"
+    "react-resizable-panels": "^2.0.20",
+    "react-window": "^1.8.10"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

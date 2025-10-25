@@ -1,5 +1,6 @@
-// Plik server/controllers/orderController.js
+// Plik: server/controllers/orderController.js
 const orderService = require('../services/orderService.js');
+const labelService = require('../services/labelService.js');
 
 exports.getAllOrders = async (req, res, next) => {
   try {
@@ -10,67 +11,8 @@ exports.getAllOrders = async (req, res, next) => {
   }
 };
 
-exports.updateOrder = async (req, res, next) => {
-  try {
-    const { orderId } = req.params;
-    const orderData = req.body;
-    const { loading_date_time, unloading_date_time } = orderData;
-
-    // --- Walidacja po stronie serwera dla aktualizacji ---
-    if (loading_date_time && unloading_date_time) {
-      const loadingDate = new Date(loading_date_time);
-      const unloadingDate = new Date(unloading_date_time);
-
-      if (isNaN(loadingDate.getTime()) || isNaN(unloadingDate.getTime())) {
-        return res.status(400).json({ error: 'Nieprawidłowy format daty.' });
-      }
-
-      if (unloadingDate <= loadingDate) {
-        return res.status(400).json({ error: 'Data rozładunku musi być późniejsza niż data załadunku.' });
-      }
-    }
-
-    if (!orderData.sender_details?.name || !orderData.recipient_details?.name) {
-      return res.status(400).json({ error: 'Nazwa nadawcy i odbiorcy jest wymagana.' });
-    }
-    // --- Koniec walidacji ---
-
-    const updatedOrder = await orderService.updateOrder(orderId, orderData);
-
-    if (!updatedOrder) {
-      return res.status(404).json({ error: 'Nie znaleziono zlecenia do aktualizacji.' });
-    }
-    res.json(updatedOrder);
-  } catch (error) {
-    next(error);
-  }
-};
-
 exports.createOrder = async (req, res, next) => {
   try {
-    const { loading_date_time, unloading_date_time, sender_details, recipient_details } = req.body;
-
-    // --- Walidacja po stronie serwera ---
-    if (!loading_date_time || !unloading_date_time || !sender_details || !recipient_details) {
-      return res.status(400).json({ error: 'Brak wymaganych pól (daty, dane nadawcy/odbiorcy).' });
-    }
-
-    if (!sender_details.name || !recipient_details.name) {
-      return res.status(400).json({ error: 'Sender/recipient name and city are required.' });
-    }
-
-    const loadingDate = new Date(loading_date_time);
-    const unloadingDate = new Date(unloading_date_time);
-
-    if (isNaN(loadingDate.getTime()) || isNaN(unloadingDate.getTime())) {
-      return res.status(400).json({ error: 'Nieprawidłowy format daty.' });
-    }
-
-    if (unloadingDate <= loadingDate) {
-      return res.status(400).json({ error: 'Data rozładunku musi być późniejsza niż data załadunku.' });
-    }
-    // --- Koniec walidacji ---
-
     const newOrder = await orderService.createOrder(req.body);
     res.status(201).json(newOrder);
   } catch (error) {
@@ -78,15 +20,11 @@ exports.createOrder = async (req, res, next) => {
   }
 };
 
-exports.importOrders = async (req, res, next) => {
+exports.updateOrder = async (req, res, next) => {
   try {
-    const ordersData = req.body;
-    if (!Array.isArray(ordersData) || ordersData.length === 0) {
-      return res.status(400).json({ error: 'Oczekiwano tablicy zleceń w ciele żądania.' });
-    }
-
-    const result = await orderService.importOrders(ordersData);
-    res.status(201).json({ message: `Pomyślnie zaimportowano ${result.count} zleceń.`, ...result });
+    const updatedOrder = await orderService.updateOrder(req.params.id, req.body);
+    if (!updatedOrder) return res.status(404).json({ error: 'Order not found' });
+    res.json(updatedOrder);
   } catch (error) {
     next(error);
   }
@@ -94,13 +32,46 @@ exports.importOrders = async (req, res, next) => {
 
 exports.deleteOrder = async (req, res, next) => {
   try {
-    const { orderId } = req.params;
-    const changes = await orderService.deleteOrder(orderId);
+    const changes = await orderService.deleteOrder(req.params.id);
+    if (changes === 0) return res.status(404).json({ error: 'Order not found' });
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
 
-    if (changes === 0) {
-      return res.status(404).json({ error: 'Nie znaleziono zlecenia do usunięcia.' });
+exports.generateLabels = async (req, res, next) => {
+  try {
+    const pdfBuffer = await labelService.generatePalletLabelsPDF(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="labels_order_${req.params.id}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.importOrders = async (req, res, next) => {
+  try {
+    const { orders } = req.body;
+    if (!orders || !Array.isArray(orders)) {
+      return res.status(400).json({ error: 'Invalid data format. "orders" array is required.' });
     }
-    res.status(204).send(); // 204 No Content - standard dla pomyślnego usunięcia
+    const result = await orderService.importOrders(orders);
+    res.status(201).json({ message: `Successfully processed ${result.count} orders.`, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.bulkDeleteOrders = async (req, res, next) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Invalid or empty array of order IDs provided.' });
+  }
+  try {
+    const deletedCount = await orderService.bulkDeleteOrders(ids);
+    res.status(200).json({ message: `${deletedCount} orders deleted successfully.` });
   } catch (error) {
     next(error);
   }

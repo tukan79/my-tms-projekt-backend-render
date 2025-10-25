@@ -5,7 +5,8 @@
 
 /* Ustawienie bazowego rozmiaru czcionki dla całej aplikacji */
 html {
-  font-size: 10px; /* Zmniejsza domyślny rozmiar, co wpływa na wszystkie jednostki 'rem' */
+  font-size: 10px;
+  height: 100%;
 }
 
 /* Ustawienia globalne dla całej strony */
@@ -15,8 +16,11 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f8f9fa; /* Jaśniejsze tło */
-  color: #212529; /* Ciemniejszy tekst dla lepszego kontrastu */
+  background-color: #f8f9fa;
+  color: #212529;
+  height: 100%;
+  /* Domyślnie przewijanie jest włączone */
+  overflow: auto;
 }
 
 /* Definicje zmiennych CSS dla łatwiejszego zarządzania kolorami */
@@ -35,15 +39,20 @@ body {
   --sidebar-active-bg: #34495e;
 }
 
+/* Blokujemy przewijanie body tylko dla głównej aplikacji, a nie dla pop-outów */
+body.main-app-body {
+  overflow: hidden;
+}
+
 /* Główny kontener aplikacji, zajmujący całą wysokość i szerokość widoku */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh; /* Ustawiamy sztywną wysokość na 100% widoku */
 }
 
 /* Sidebar */
 .sidebar {
-  width: 90px;
+  width: 9rem; /* Używamy rem dla lepszej skalowalności */
   background-color: var(--sidebar-bg);
   color: var(--sidebar-text);
   padding: 2rem 1rem;
@@ -67,7 +76,7 @@ body {
   margin: 0 0 0.25rem 0;
   font-weight: 600;
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .sidebar-header p {
@@ -179,19 +188,55 @@ body {
 /* Kontener głównej zawartości, który rozciąga się, aby wypełnić przestrzeń */
 .main-content {
   flex-grow: 1;
+  display: flex;
+  flex-direction: column;
   padding: 2rem;
-  overflow-y: auto; /* Umożliwia przewijanie tylko głównej treści */
-  box-sizing: border-box; /* Ważne, aby padding nie powiększał kontenera */
+  overflow-y: auto; /* Kluczowa zmiana: Włączamy przewijanie tylko dla tego kontenera */
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 7rem;
+    padding: 1rem 0.5rem;
+  }
+  
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .form-span-2 {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-actions {
+    flex-direction: column;
+  }
 }
 
 /* Komponenty */
 .card {
   background-color: var(--card-background);
+  display: flex;
+  flex-direction: column;
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); /* Subtelniejszy cień */
-  margin-bottom: 2rem;
   border: 1px solid var(--border-color);
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.text-muted {
+  color: var(--text-color-light);
+  font-style: italic;
 }
 
 h2 {
@@ -200,6 +245,16 @@ h2 {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.5rem;
   margin-bottom: 1.5rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
 }
 
 .list {
@@ -340,6 +395,15 @@ h2 {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
 /* Style formularzy */
 .form {
   display: flex;
@@ -391,6 +455,21 @@ h2 {
   box-shadow: 0 0 0 2px rgba(74, 105, 189, 0.2);
 }
 
+/* Nowe style dla błędów w formularzach */
+.form-group .input-error {
+  border-color: var(--danger-color);
+}
+
+.form-group .input-error:focus {
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2);
+}
+
+.error-text {
+  color: var(--danger-color);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -406,7 +485,16 @@ h2 {
 .data-table {
   border-collapse: collapse;
   margin-top: 1rem;
+  table-layout: fixed; /* Kluczowa zmiana: Zapobiega rozpychaniu tabeli przez treść */
   min-width: max-content; /* Kluczowe dla wymuszenia poziomego przewijania */
+}
+
+/* Nowy kontener dla DataTable, który zapewnia prawidłowy układ flex */
+.data-table-container {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0; /* Kluczowe dla poprawnego działania flexbox z overflow */
 }
 
 .data-table th, .data-table td {
@@ -418,7 +506,6 @@ h2 {
 .data-table th {
   font-weight: 600;
   cursor: pointer;
-  user-select: none;
 }
 
 .data-table th:hover {
@@ -445,12 +532,46 @@ h2 {
 
 /* Kontener dla tabel, zapewniający widoczne paski przewijania */
 .table-wrapper {
-  overflow: auto; /* Włącza przewijanie w obu osiach */
+  overflow-x: auto; /* Poziome przewijanie zawsze dostępne */
+  overflow-y: auto; /* Pionowe przewijanie w razie potrzeby */
   width: 100%;
-  /* Ogranicza wysokość kontenera tabeli i dodaje pionowy pasek przewijania wewnątrz niego,
-     dzięki czemu poziomy pasek jest zawsze widoczny na dole. */
-  max-height: calc(100vh - 18rem); /* Dostosuj w razie potrzeby, np. 'calc(100vh - 250px)' */
-  position: relative; /* Zapewnia prawidłowe pozycjonowanie elementów wewnątrz */
+  flex-grow: 1;
+  min-height: 0;
+
+  /* Wymusza widoczne paski przewijania na Windows */
+  scrollbar-width: thin; /* Dla Firefox - zawsze widoczny */
+  -ms-overflow-style: scrollbar; /* Dla IE/Edge - zawsze widoczny */
+}
+
+/* Dla przeglądarek WebKit (Chrome, Safari, Edge) */
+.table-wrapper::-webkit-scrollbar {
+  width: 12px;  /* Szerokość pionowego paska */
+  height: 12px; /* Wysokość poziomego paska - KLUCZOWE dla poziomego przewijania */
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 6px;
+  border: 2px solid #f1f1f1; /* Dodatkowe odstępy */
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* SPECJALNIE dla poziomego paska - większy i bardziej widoczny */
+.table-wrapper::-webkit-scrollbar-thumb:horizontal {
+  background: #a8a8a8; /* Ciemniejszy dla lepszej widoczności */
+  min-width: 100px; /* Minimalna szerokość "uchwytu" */
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:horizontal:hover {
+  background: #8a8a8a;
 }
 
 .status {
@@ -461,16 +582,16 @@ h2 {
 }
 
 /* Połączone style dla statusów o tym samym znaczeniu */
-.status.active, 
-.status-zakończone { background-color: #d1e7dd; color: #0f5132; }
+.status.active,
+.status-completed { background-color: #d1e7dd; color: #0f5132; }
 
-.status.inactive, 
-.status-anulowane { background-color: #f8d7da; color: #842029; }
+.status.inactive,
+.status-cancelled { background-color: #f8d7da; color: #842029; }
 
 /* Pozostałe statusy */
-.status-nowe { background-color: #cff4fc; color: #055160; }
-.status-zaplanowane { background-color: #fff3cd; color: #664d03; }
-.status-w-trakcie { background-color: #cfe2ff; color: #0a58ca; }
+.status-new { background-color: #cff4fc; color: #055160; }
+.status-planned { background-color: #fff3cd; color: #664d03; }
+.status-in_progress { background-color: #cfe2ff; color: #0a58ca; }
 
 .date-time {
   font-size: 0.85rem;
@@ -479,7 +600,7 @@ h2 {
 
 /* PlanIt Page Styles */
 .planit-container-resizable {
-  height: calc(100vh - 4rem - 70px); /* Pełna wysokość minus padding i nagłówek */
+  height: calc(100vh - 4rem - 70px); /* Upewnij się, że te wartości są poprawne */
 }
 
 .resize-handle {
@@ -491,14 +612,15 @@ h2 {
   background-color: var(--primary-color);
 }
 .resize-handle[data-panel-group-direction="horizontal"] {
-  width: 4px;
+  width: 4px; /* Upewnij się, że ta wartość jest wystarczająca */
 }
 
 .planit-section, .planit-assignments-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Zapobiega rozpychaniu przez potomków */
-  height: 100%; /* Kluczowe, aby komponent wypełnił całą wysokość panelu */
+  overflow: hidden;
+  /* Usunięcie height: 100% pozwoli obu komponentom (PlanItRuns i ActiveRunView)
+     na poprawne wyświetlanie się w kontenerze flex-column. */
   min-height: 0; /* Kluczowe dla poprawnego działania overflow w potomkach flexbox */
 }
 
@@ -511,8 +633,11 @@ h2 {
   list-style: none;
   padding: 0;
   margin: 0;
-  overflow: auto; /* Włącz przewijanie w obu osiach */
-  flex-grow: 1; /* Pozwala liście wypełnić dostępną przestrzeń */
+  overflow-y: auto; /* Zmieniamy na overflow-y, aby tylko pionowe przewijanie było domyślne */
+  /* Usuwamy flex-grow: 1, aby lista nie rozpychała się na całą wysokość,
+     co pozwoli na wyświetlenie ActiveRunView pod nią.
+     Wysokość będzie teraz zarządzana przez kontener flex. */
+  overflow: visible;
 }
 
 .planit-list-item {
@@ -552,6 +677,23 @@ h2 {
   opacity: 1;
 }
 
+/* Styl dla aktywnego przejazdu */
+.planit-list-item.active-run {
+  background-color: var(--primary-color-dark);
+  color: white;
+  border-left: 4px solid #f1c40f; /* Złoty akcent */
+}
+
+.planit-list-item.active-run .capacity-text,
+.planit-list-item.active-run .run-stats {
+  color: #ecf0f1; /* Jaśniejszy tekst dla statystyk */
+}
+
+.active-run-view {
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 4px 12px rgba(74, 105, 189, 0.2);
+}
+
 /* Specjalne style dla tabel w widoku PlanIt, aby były bardziej kompaktowe */
 .planit-section .data-table {
   font-size: 0.8rem; /* Zmniejszona czcionka */
@@ -582,11 +724,6 @@ h2 {
   margin-top: 0;
   margin-bottom: 1.5rem;
   color: var(--text-color-light);
-}
-
-.planit-controls-buttons {
-  display: flex;
-  gap: 1rem;
 }
 
 /* Toast Notification Styles */
@@ -694,7 +831,8 @@ h2 {
 
 .planit-grid-body {
   flex-grow: 1;
-  overflow-y: auto;
+  position: relative; /* Required for AutoSizer or manual sizing */
+  overflow: auto;
 }
 
 .planit-grid-row {
@@ -722,7 +860,36 @@ h2 {
   font-weight: 500;
 }
 
+/* Styl dla menu kontekstowego */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.context-menu button:hover { background-color: #f8f9fa; }
+
 /* Style dla wskaźników pojemności w przejazdach */
+.op-type-indicator {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 2px 0 0 2px;
+}
+.op-type-indicator.delivery { background-color: var(--primary-color); }
+.op-type-indicator.collection { background-color: #f39c12; }
+
+
 .run-capacity-details {
   display: flex;
   flex-direction: column;
@@ -756,6 +923,10 @@ h2 {
   background-color: var(--primary-color);
   border-radius: 4px;
   transition: width 0.3s ease-in-out;
+}
+
+.capacity-bar.overloaded {
+  background-color: var(--danger-color); /* Zmienia kolor paska na czerwony po przekroczeniu limitu */
 }
 
 /* Styl dla podręcznego okienka (tooltip) */
@@ -820,6 +991,13 @@ h2 {
   font-weight: 500;
 }
 
+/* Specjalny styl dla komórki z tagami, aby umożliwić zawijanie */
+.data-table .tag-cell {
+  white-space: normal; /* Pozwala na zawijanie tekstu i elementów */
+  width: 50vw; /* Ustawia stałą szerokość, aby wymusić zawijanie */
+  word-break: break-word;
+}
+
 /* Style dla przeciąganych tagów */
 .draggable-tag {
   position: relative;
@@ -869,4 +1047,39 @@ h2 {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8; /* Kolor paska po najechaniu */
+}
+
+/* Style dla podsumowania ceny */
+.price-breakdown {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+.price-breakdown h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+.price-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+/* Style dla opcji dopłat */
+.surcharge-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-group-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.form-group-checkbox label {
+  margin-bottom: 0;
 }

@@ -16,15 +16,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')) || null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Dodajemy brakujący stan
   const hasVerified = React.useRef(false); // Ref to prevent double-execution in StrictMode
-
-  // Funkcja pomocnicza do zarządzania udanym uwierzytelnieniem
-  const handleAuthSuccess = (newToken, newUser) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
-  };
 
   useEffect(() => {
     const verifyToken = async () => {
@@ -37,12 +30,10 @@ export const AuthProvider = ({ children }) => {
 
       if (token) {
         // Interceptor w api.js automatycznie obsłuży błąd 401/403 i wyloguje użytkownika.
-        try {
-          const response = await api.get('/api/auth/verify');
-          handleAuthSuccess(token, response.data.user);
-        } catch (error) {
-          // Token is invalid, logout
-          logout();
+        // W starym systemie, sam fakt posiadania tokenu i danych użytkownika wystarczał.
+        // Weryfikacja odbywa się przy każdym zapytaniu do API.
+        if (user) {
+          setIsAuthenticated(true); // Ustawiamy stan uwierzytelnienia
         }
       }
       setLoading(false);
@@ -52,19 +43,32 @@ export const AuthProvider = ({ children }) => {
   }, [token]); // Dependency array is correct
 
   const login = async (email, password) => {
-    const response = await api.post('/api/auth/login', { email, password });
-    const { token: newToken, user: newUser } = response.data;
-    handleAuthSuccess(newToken, newUser);
-    return newUser;
+    setLoading(true);
+    try {
+      const response = await api.post('/api/auth/login', { email, password });
+      const { token: newToken, user: newUser } = response.data;
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      setIsAuthenticated(true);
+      return newUser;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error; // Rzucamy błąd dalej, aby formularz logowania mógł go obsłużyć
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const register = async (email, password) => {
-    const response = await api.post('/api/auth/register', { email, password });
+  const register = async (userData) => {
+    const response = await api.post('/api/auth/register', userData);
     return response.data;
   };
 
   const logout = () => {
     setToken(null);
+    setIsAuthenticated(false);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -76,7 +80,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     register,
-    isAuthenticated: !!token,
+    isAuthenticated,
     loading,
     api,
   };

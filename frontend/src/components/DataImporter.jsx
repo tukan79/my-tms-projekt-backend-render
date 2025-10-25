@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { X, UploadCloud, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
-import api from '../services/api.js';
-import { useToast } from '../contexts/ToastContext.jsx';
+import api from '@/services/api';
+import { useToast } from '@/contexts/ToastContext.jsx';
 
 const getNestedValue = (obj, path) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
 
@@ -18,6 +18,7 @@ const DataImporter = ({
   const [file, setFile] = useState(null);
   const [parsedData, setParsedData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [parsingErrors, setParsingErrors] = useState([]);
   const [error, setError] = useState(null);
   const { showToast } = useToast();
 
@@ -26,6 +27,7 @@ const DataImporter = ({
     if (selectedFile) {
       setFile(selectedFile);
       setError(null);
+      setParsingErrors([]);
 
       Papa.parse(selectedFile, {
         header: true,
@@ -34,10 +36,14 @@ const DataImporter = ({
         complete: (results) => {
           if (results.errors.length) {
             setError('Error parsing CSV file. Please check its structure.');
+            setParsingErrors(results.errors);
+            // Logujemy szczegółowe błędy do konsoli deweloperskiej
+            console.error("CSV Parsing Errors:", results.errors);
             setParsedData([]);
           } else {
             const mappedData = results.data.map(dataMappingFn).filter(Boolean);
             setParsedData(mappedData);
+            setParsingErrors([]);
           }
         },
         error: () => {
@@ -91,7 +97,7 @@ const DataImporter = ({
 
       {error && <div className="error-message" style={{ whiteSpace: 'pre-wrap' }}><AlertTriangle size={16} /> {error}</div>}
 
-      {!file ? (
+      {!file ? ( 
         <div className="dropzone" onDragOver={handleDragOver} onDrop={handleDrop} onClick={() => document.getElementById('file-input-generic').click()}>
           <UploadCloud size={48} />
           <p>Drag & drop a CSV file here, or click to select a file.</p>
@@ -102,8 +108,20 @@ const DataImporter = ({
           <div className="file-info" style={{ marginTop: '1.5rem' }}>
             <FileText size={24} />
             <span>{file.name}</span>
-            <button onClick={() => { setFile(null); setParsedData([]); setError(null); }} className="btn-icon"><X size={16} /></button>
+            <button onClick={() => { setFile(null); setParsedData([]); setError(null); setParsingErrors([]); }} className="btn-icon"><X size={16} /></button>
           </div>
+
+          {parsingErrors.length > 0 && (
+            <div className="error-message" style={{ marginTop: '1rem', maxHeight: '150px', overflowY: 'auto', padding: '1rem', background: '#fff3f3', borderRadius: '6px' }}>
+              <strong>Parsing Errors Found:</strong>
+              <ul>
+                {parsingErrors.slice(0, 5).map((err, index) => (
+                  <li key={index}>Row {err.row}: {err.message}</li>
+                ))}
+              </ul>
+              {parsingErrors.length > 5 && <p>...and {parsingErrors.length - 5} more errors.</p>}
+            </div>
+          )}
 
           {parsedData.length > 0 && (
             <>

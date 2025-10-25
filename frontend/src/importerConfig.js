@@ -6,6 +6,7 @@ export const importerConfig = {
   orders: {
     title: 'Import Orders',
     apiEndpoint: '/api/orders/import',
+    postDataKey: 'orders', // Backend oczekuje { orders: [...] }
     dataMappingFn: (row) => ({
       order_number: row.ConsignmentNumber,
       customer_reference: row.CustomerReference,
@@ -26,20 +27,63 @@ export const importerConfig = {
         postCode: row.DeliveryPostCode,
       },
       loading_date_time: row.CollectionDate ? `${row.CollectionDate}T${row.CollectionTime || '12:00:00'}` : null,
-      unloading_date_time: row.DeliveryDate ? `${row.DeliveryDate}T${row.DeliveryTime || '12:00:00'}` : null,
+      unloading_date_time: row.DeliveryDate ? `${row.DeliveryDate}T${row.DeliveryTime || '12:00:00'}` : null, // To pole jest nadal potrzebne dla sortowania/filtrowania
+      // Nowa, bardziej zaawansowana logika mapowania czasu
+      ...(() => {
+        // Uproszczona i bardziej skalowalna logika mapowania czasu dostawy
+        const timeSurchargeConfig = {
+          'BW': { hours: 4, type: 'window' }, // 4-godzinne okno przed czasem dostawy
+          'AM': { startTime: '09:00', type: 'before' }, // Dostawa przed czasem z pliku
+          'PT': { startTime: '09:00', type: 'before' }, // Dostawa przed czasem z pliku
+        };
+
+        const surcharges = (row.Surcharges || '').split(' ').filter(Boolean);
+        const deliveryTime = row.DeliveryTime || null;
+        const surchargeCode = surcharges.find(code => timeSurchargeConfig[code]);
+
+        if (surchargeCode && deliveryTime) {
+          const config = timeSurchargeConfig[surchargeCode];
+          const endTime = deliveryTime.slice(0, 5);
+          let startTime = config.startTime; // Domyślnie użyj czasu z konfiguracji
+          if (config.type === 'window') {
+            const [endHour, endMinute] = endTime.split(':').map(Number);
+            const date = new Date(0, 0, 0, endHour, endMinute);
+            date.setHours(date.getHours() - config.hours);
+            startTime = date.toTimeString().slice(0, 5);
+          }
+          return { unloading_start_time: startTime, unloading_end_time: endTime };
+        }
+        return { unloading_start_time: deliveryTime?.slice(0, 5) || null, unloading_end_time: null };
+      })(),
       cargo_details: {
         description: `Spaces: ${row.TotalSpaces}, Kilos: ${row.TotalKilos}`,
-        pallets: {
-          full: { count: parseInt(row.FullQ) || 0, spaces: parseInt(row.FullS) || parseInt(row.FullQ) || 0 },
-          half: { count: parseInt(row.HalfQ) || 0, spaces: parseInt(row.HalfS) || parseInt(row.HalfQ) || 0 },
-          plus_half: { count: parseInt(row.HalfPlusQ) || 0, spaces: parseInt(row.HalfPlusS) || parseInt(row.HalfPlusQ) || 0 },
-          quarter: { count: parseInt(row.QuarterQ) || 0, spaces: parseInt(row.QuarterS) || parseInt(row.QuarterQ) || 0 },
-          micro: { count: parseInt(row.MicroQ) || 0, spaces: parseInt(row.MicroS) || parseInt(row.MicroQ) || 0 },
-        },
+        // Poprawka: Konwertujemy obiekt palet na tablicę, aby pasowała do formatu formularza.
+        pallets: Object.entries({
+          full: { quantity: parseInt(row.FullQ) || 0, spaces: parseFloat(row.FullS) || parseInt(row.FullQ) || 0, weight: parseFloat(row.FullW) || 0 },
+          half: { quantity: parseInt(row.HalfQ) || 0, spaces: parseFloat(row.HalfS) || 0.5 * (parseInt(row.HalfQ) || 0), weight: parseFloat(row.HalfW) || 0 },
+          half_plus: { quantity: parseInt(row.HalfPlusQ) || 0, spaces: parseFloat(row.HalfPlusS) || 1.5 * (parseInt(row.HalfPlusQ) || 0), weight: parseFloat(row.HalfPlusW) || 0 },
+          quarter: { quantity: parseInt(row.QuarterQ) || 0, spaces: parseFloat(row.QuarterS) || 0.5 * (parseInt(row.QuarterQ) || 0), weight: parseFloat(row.QuarterW) || 0 },
+          micro: { quantity: parseInt(row.MicroQ) || 0, spaces: parseFloat(row.MicroS) || 0.25 * (parseInt(row.MicroQ) || 0), weight: parseFloat(row.MicroW) || 0 },
+        })
+        .filter(([, details]) => details.quantity > 0)
+        .map(([type, details]) => ({
+          type,
+          quantity: details.quantity,
+          spaces: details.spaces,
+          weight: details.weight,
+        })),
         total_kilos: parseFloat(row.TotalKilos) || 0,
         total_spaces: parseFloat(row.TotalSpaces) || 0,
+        // Mapowanie pól Amazona
+        amazon_asn: row.AmazonASN,
+        amazon_fbaref: row.AmazonFBARef,
+        amazon_carton_count: parseInt(row.AmazonCartonCount, 10) || null,
+        amazon_unit_count: parseInt(row.AmazonUnitCount, 10) || null,
+        amazon_poref: row.AmazonPORef,
       },
       service_level: row.ServiceCode || 'A',
+      // Odczytujemy kody dopłat, dzielimy je po spacji i filtrujemy puste wartości
+      selected_surcharges: (row.Surcharges || '').split(' ').filter(Boolean),
     }),
     previewColumns: [
       createPreview('order_number', 'Consignment #'),

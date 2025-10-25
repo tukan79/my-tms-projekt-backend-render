@@ -1,13 +1,11 @@
 import React, { useMemo, useCallback } from 'react';
 import { useApiResource } from './useApiResource';
-import { useBroadcastChannel } from './useBroadcastChannel';
+import api from '@/services/api';
+import { useBroadcastChannel } from '@/hooks/useBroadcastChannel';
 
-/**
- * Custom hook to manage assignment logic for the PlanIt page.
- * @param {{ initialAssignments: Array, orders: Array, enrichedRuns: Array, onDataRefresh: Function }} props
- * @returns {{ assignments: Array, availableOrders: Array, handleDragEnd: Function, handleDeleteAssignment: Function, error: string|null }}
- */
 export const useAssignments = ({ initialAssignments = [], orders = [], enrichedRuns = [], onDataRefresh }) => {
+  console.log('🔧 useAssignments called with:', { initialAssignments, orders, enrichedRuns });
+
   const { 
     data: assignments, 
     error, 
@@ -16,10 +14,10 @@ export const useAssignments = ({ initialAssignments = [], orders = [], enrichedR
     setData: setAssignments 
   } = useApiResource('/api/assignments', 'assignment');
 
-  // Sync initial assignments from props on first load or when they change.
   React.useEffect(() => {
+    // Ten useEffect powinien synchronizować stan wewnętrzny z danymi przychodzącymi z góry.
     setAssignments(initialAssignments);
-  }, [initialAssignments, setAssignments]);
+  }, [initialAssignments, setAssignments]); // Uruchom ponownie, gdy zmienią się `initialAssignments`.
 
   const { postMessage } = useBroadcastChannel();
 
@@ -49,8 +47,17 @@ export const useAssignments = ({ initialAssignments = [], orders = [], enrichedR
     }
 
     if (source.droppableId === 'orders' && destination.droppableId !== 'orders') {
-      const orderId = parseInt(draggableId, 10);
-      const runId = parseInt(destination.droppableId, 10);
+      // Usuwamy prefix, jeśli istnieje, aby uzyskać czyste ID
+      const cleanDraggableId = draggableId.startsWith('order-') ? draggableId.substring(6) : draggableId;
+      const orderId = parseInt(cleanDraggableId, 10);
+      
+      // Sprawdzamy, czy upuszczono na listę kursów, czy na widok aktywnego kursu
+      let runId;
+      if (destination.droppableId.startsWith('run-active-')) {
+        runId = parseInt(destination.droppableId.replace('run-active-', ''), 10);
+      } else {
+        runId = parseInt(destination.droppableId, 10);
+      }
       
       const movedOrder = orders.find(o => o.id === orderId);
       if (!movedOrder) return;
@@ -76,14 +83,41 @@ export const useAssignments = ({ initialAssignments = [], orders = [], enrichedR
   }, [createAssignment, orders, enrichedRuns, onDataRefresh, postMessage]);
   
   const handleDeleteAssignment = useCallback(async (assignmentId) => {
+    console.log('🗑️ Deleting assignment:', assignmentId);
     try {
       await deleteAssignment(assignmentId);
-      if (onDataRefresh) onDataRefresh();
-      postMessage('refresh');
+      // Nie ma potrzeby odświeżania, useApiResource zarządza stanem.
+      postMessage('refresh'); // Powiadom inne karty
+      console.log('✅ Assignment deleted successfully');
     } catch (err) {
-      console.error("Failed to delete assignment:", err);
+      console.error("❌ Error deleting assignment:", err);
     }
   }, [deleteAssignment, onDataRefresh, postMessage]);
 
-  return { assignments: enrichedAssignments, availableOrders, handleDragEnd, handleDeleteAssignment, error };
+  const bulkAssignOrders = useCallback(async (runId, orderIds) => {
+    try {
+      await api.post('/api/assignments/bulk', {
+        run_id: runId,
+        order_ids: orderIds,
+      });
+      if (onDataRefresh) onDataRefresh();
+      postMessage('refresh');
+      return { success: true, message: `${orderIds.length} orders assigned successfully.` };
+    } catch (err) {
+      console.error('Bulk assign failed:', err);
+      return { 
+        success: false, 
+        message: err.response?.data?.error || 'Failed to bulk assign orders.' 
+      };
+    }
+  }, [onDataRefresh, postMessage]);
+
+  return { 
+    assignments: enrichedAssignments, 
+    availableOrders, 
+    handleDragEnd, 
+    handleDeleteAssignment, 
+    bulkAssignOrders, 
+    error 
+  };
 };

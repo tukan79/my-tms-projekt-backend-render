@@ -3,8 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser'); // Importujemy cookie-parser
 const rateLimit = require('express-rate-limit');
 
+const util = require('util'); // Importujemy moduł 'util'
 // Importujemy trasy
 const authRoutes = require('./routes/authRoutes');
 const driverRoutes = require('./routes/driverRoutes');
@@ -17,6 +19,9 @@ const runRoutes = require('./routes/runRoutes');
 const customerRoutes = require('./routes/customerRoutes.js');
 const postcodeZoneRoutes = require('./routes/postcodeZoneRoutes');
 const rateCardRoutes = require('./routes/rateCardRoutes');
+const surchargeTypeRoutes = require('./routes/surchargeTypeRoutes.js');
+const feedbackRoutes = require('./routes/feedbackRoutes.js');
+const invoiceRoutes = require('./routes/invoiceRoutes.js');
 // ... i tak dalej dla innych zasobów
 
 // Importujemy middleware do obsługi błędów
@@ -28,10 +33,21 @@ const app = express();
 // --- Middleware bezpieczeństwa ---
 app.use(helmet()); // Ustawia bezpieczne nagłówki HTTP
 
-const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-};
-app.use(cors(corsOptions));   // Umożliwia żądania z innych domen (konfigurowalne)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://192.168.3.1:5173',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Pozwalamy na żądania bez 'origin' (np. z Postmana, cURL) oraz z dozwolonych adresów.
+    // To ułatwia testowanie API.
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+}));
 
 // Ogranicznik żądań, aby chronić przed atakami brute-force
 const limiter = rateLimit({
@@ -55,8 +71,12 @@ app.use('/api', (req, res, next) => {
 app.use(express.json({ limit: '5mb' })); // Zwiększamy limit do 5MB, aby umożliwić import większych plików CSV.
 
 // Zaawansowane logowanie z morgan, które zawiera również ciało żądania
-morgan.token('body', (req) => JSON.stringify(req.body));
-app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'));
+if (process.env.NODE_ENV !== 'production') {
+  morgan.token('body', (req) => util.inspect(req.body, { depth: 3, colors: false }));
+  app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'));
+} else {
+  app.use(morgan('combined')); // Standardowy format logów dla produkcji
+}
 
 // --- Health Check Endpoint ---
 app.get('/health', async (req, res) => {
@@ -85,13 +105,15 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/runs', runRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/zones', postcodeZoneRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/rate-cards', rateCardRoutes);
+app.use('/api/surcharge-types', surchargeTypeRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // --- Obsługa błędów ---
 // Middleware do obsługi nieznalezionych tras (404)
 app.use((req, res, next) => {
-  res.status(404).json({ error: `Nie znaleziono zasobu: ${req.originalUrl}` });
+  res.status(404).json({ error: `Resource not found: ${req.originalUrl}` });
 });
 
 app.use(errorMiddleware); // Centralny middleware do obsługi błędów

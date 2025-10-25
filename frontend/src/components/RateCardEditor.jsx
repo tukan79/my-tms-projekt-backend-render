@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import api from '../services/api.js';
-import { useToast } from '../contexts/ToastContext.jsx';
-import { Plus, Trash2, X, Edit, Save, XCircle, Download, Upload } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import api from '@/services/api.js';
+import { useToast } from '@/contexts/ToastContext.jsx';
+import { Plus, Trash2, X, Edit, Save, XCircle, Download, Upload, UploadCloud, FileText, AlertTriangle } from 'lucide-react';
 import AddRateEntryForm from './AddRateEntryForm.jsx';
-import DataImporter from './DataImporter.jsx'; // Używamy generycznego importera
+import DataImporter from './DataImporter.jsx';
 
 const RateCardEditor = ({ customers = [], zones = [] }) => {
   const [rateCards, setRateCards] = useState([]);
@@ -14,6 +14,7 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
   const [showImporter, setShowImporter] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false); // Stan do pokazywania formularza
   const [assignedCustomers, setAssignedCustomers] = useState([]);
+  const [customersToAssign, setCustomersToAssign] = useState([]);
   const { showToast } = useToast();
 
   // Fetch all global rate cards on component mount
@@ -85,14 +86,20 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
     }
   };
 
-  const handleAssignCustomer = async (customerId) => {
-    if (!selectedRateCardId || !customerId) return;
+  const handleBulkAssignCustomers = async () => {
+    if (!selectedRateCardId || customersToAssign.length === 0) {
+      showToast('Please select a rate card and at least one customer.', 'warning');
+      return;
+    }
     try {
-      await api.post(`/api/rate-cards/${selectedRateCardId}/customers/${customerId}`);
+      await api.post(`/api/rate-cards/${selectedRateCardId}/customers`, {
+        customerIds: customersToAssign,
+      });
       fetchAssignedCustomers();
-      showToast('Customer assigned successfully.', 'success');
+      setCustomersToAssign([]); // Wyczyść wybór po przypisaniu
+      showToast(`${customersToAssign.length} customer(s) assigned successfully.`, 'success');
     } catch (error) {
-      showToast('Failed to assign customer.', 'error');
+      showToast('Failed to assign customers.', 'error');
     }
   };
 
@@ -122,9 +129,15 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
     }
   };
   
-  const handleImportSuccess = () => {
+  const handleImportSuccess = (response) => {
     setShowImporter(false);
-    fetchRateEntries(); // Bezpośrednio odświeżamy dane
+    fetchRateEntries();
+    const { count = 0, skipped = 0 } = response.data || {};
+    let message = `Successfully imported ${count} rate entries.`;
+    if (skipped > 0) {
+      message += ` Skipped ${skipped} rows due to errors (check console for details).`;
+    }
+    showToast(message, 'success');
   };
 
   const handleUpdateRateEntry = async () => {
@@ -188,35 +201,7 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
   const unassignedCustomers = useMemo(() => {
     const assignedIds = new Set(assignedCustomers.map(c => c.id));
     return customers.filter(c => !assignedIds.has(c.id));
-  }, [customers, assignedCustomers]);
-
-  // Konfiguracja dla generycznego importera
-  const rateCardImporterConfig = {
-    title: 'Import Rate Entries',
-    apiEndpoint: `/api/rate-cards/${selectedRateCardId}/import`,
-    postDataKey: 'entries', // API oczekuje { entries: [...] }
-    dataMappingFn: (row) => {
-      // Proste mapowanie, zakładając, że nagłówki CSV pasują do oczekiwanych kluczy
-      // Można tu dodać bardziej złożoną logikę, jeśli nagłówki się różnią
-      return {
-        'Rate Type': row['Rate Type'],
-        'Zone Name': row['Zone Name'],
-        'Service Level': row['Service Level'],
-        'Price Micro': row['Price Micro'],
-        'Price Quarter': row['Price Quarter'],
-        'Price Half': row['Price Half'],
-        'Price Half Plus': row['Price Half Plus'],
-        'Price Full 1': row['Price Full 1'],
-        // ... można dodać resztę kolumn cenowych
-      };
-    },
-    previewColumns: [
-      { key: 'Rate Type', header: 'Type' },
-      { key: 'Zone Name', header: 'Zone' },
-      { key: 'Service Level', header: 'Service' },
-      { key: 'Price Full 1', header: 'Price (1 Full)' },
-    ],
-  };
+  }, [customers, assignedCustomers.length]);
 
   return (
     <div>
@@ -237,16 +222,26 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
           </div>
 
           {selectedRateCardId && (
-            <div className="form-grid" style={{ gridTemplateColumns: '1fr 2fr', alignItems: 'start' }}>
+            <div className="form-grid" style={{ gridTemplateColumns: '1fr 2fr', alignItems: 'stretch' }}>
               {/* Customer Assignment Section */}
               <div className="card">
                 <h5>Assigned Customers</h5>
                 <div className="form-group">
-                  <label>Assign a new customer</label>
-                  <select onChange={(e) => handleAssignCustomer(e.target.value)} value="">
-                    <option value="">-- Select customer to add --</option>
-                    {unassignedCustomers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <label>Assign new customers</label>
+                  {/* Używamy `select multiple` dla prostoty, można to zastąpić bardziej zaawansowanym komponentem */}
+                  <select
+                    multiple
+                    value={customersToAssign}
+                    onChange={(e) => setCustomersToAssign(Array.from(e.target.selectedOptions, option => option.value))}
+                    style={{ height: '150px', marginBottom: '1rem' }}
+                  >
+                    {unassignedCustomers.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
                   </select>
+                  <button onClick={handleBulkAssignCustomers} className="btn-primary" disabled={customersToAssign.length === 0}>
+                    Assign Selected ({customersToAssign.length})
+                  </button>
                 </div>
                 <ul className="list" style={{ maxHeight: '400px', overflowY: 'auto', paddingLeft: '0', listStyle: 'none' }}>
                   {assignedCustomers.map(c => (
@@ -262,75 +257,89 @@ const RateCardEditor = ({ customers = [], zones = [] }) => {
               </div>
 
               {/* Rate Entries Section */}
-              <div className="card">
+              <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
                 {showAddForm && <AddRateEntryForm zones={zones} onSubmit={handleCreateRateEntry} onCancel={() => setShowAddForm(false)} />}
-                {showImporter && <DataImporter {...rateCardImporterConfig} onSuccess={handleImportSuccess} onCancel={() => setShowImporter(false)} />}
-                
-                {!showAddForm && !showImporter && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h5>Rate Entries</h5>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      <button onClick={handleExport} className="btn-secondary"><Download size={16} /> Export</button>
-                      <button onClick={() => setShowImporter(true)} className="btn-secondary"><Upload size={16} /> Import</button>
-                      <button onClick={() => setShowAddForm(true)} className="btn-primary"><Plus size={16} /> Add Rate</button>
-                    </div>
-                  </div>
+                {showImporter && (
+                  <DataImporter
+                    title="Import Rate Entries"
+                    apiEndpoint={`/api/rate-cards/${selectedRateCardId}/entries/import`}
+                    postDataKey="entries"
+                    dataMappingFn={(row) => row} // Przekazujemy surowe wiersze, walidacja po stronie backendu
+                    previewColumns={[
+                      { key: 'Rate Type', header: 'Rate Type' },
+                      { key: 'Zone Name', header: 'Zone Name' },
+                      { key: 'Service Level', header: 'Service Level' },
+                    ]}
+                    onSuccess={handleImportSuccess}
+                    onCancel={() => setShowImporter(false)}
+                  />
                 )}
-                <div className="table-wrapper" style={{ marginTop: '1rem', display: (showAddForm || showImporter) ? 'none' : 'block' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Zone</th>
-                        <th>Service</th>
-                        {priceColumns.map(col => (
-                          <th key={col} style={{ minWidth: '100px', textTransform: 'capitalize' }}>
-                            {col.replace('price_', '').replace(/_/g, ' ')}
-                          </th>
-                        ))}
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isLoading ? (
-                        <tr><td colSpan={priceColumns.length + 4} style={{ textAlign: 'center' }}>Loading...</td></tr>
-                      ) : rateEntries.length > 0 ?
-                        rateEntries.map(entry => {
-                          const zoneName = zones.find(z => z.id === entry.zone_id)?.zone_name || 'N/A';
-                          const isEditing = editingEntry?.id === entry.id;
-                          return (
-                            <tr key={entry.id}>
-                              <td style={{ textTransform: 'capitalize' }}>{entry.rate_type.replace('_', ' ')}</td>
-                              <td>{zoneName}</td>
-                              <td>{entry.service_level}</td>
-                              {priceColumns.map(col => (
-                                <td key={col}>
+                
+                <div style={{ display: (showAddForm || showImporter) ? 'none' : 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h5>Rate Entries</h5>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button onClick={handleExport} className="btn-secondary"><Download size={16} /> Export</button>
+                        <button onClick={() => setShowImporter(true)} className="btn-secondary"><Upload size={16} /> Import</button>
+                        <button onClick={() => setShowAddForm(true)} className="btn-primary"><Plus size={16} /> Add Rate</button>
+                      </div>
+                    </div>
+                  <div className="table-wrapper" style={{ marginTop: '1rem' }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Zone</th>
+                          <th>Service</th>
+                          {priceColumns.map(col => (
+                            <th key={col} style={{ minWidth: '100px', textTransform: 'capitalize' }}>
+                              {col.replace('price_', '').replace(/_/g, ' ')}
+                            </th>
+                          ))}
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {isLoading ? (
+                          <tr><td colSpan={priceColumns.length + 4} style={{ textAlign: 'center' }}>Loading...</td></tr>
+                        ) : rateEntries.length > 0 ?
+                          rateEntries.map(entry => {
+                            const zoneName = zones.find(z => z.id === entry.zone_id)?.zone_name || 'N/A';
+                            const isEditing = editingEntry?.id === entry.id;
+                            return (
+                              <tr key={entry.id}>
+                                <td style={{ textTransform: 'capitalize' }}>{entry.rate_type.replace('_', ' ')}</td>
+                                <td>{zoneName}</td>
+                                <td>{entry.service_level}</td>
+                                {priceColumns.map(col => (
+                                  <td key={`${entry.id}-${col}`}>
+                                    {isEditing ? (
+                                      <input type="number" step="0.01" name={col} value={editingEntry[col] ?? ''} onChange={handleEditChange} style={{ width: '80px' }} autoFocus={col === priceColumns[0]} />
+                                    ) : ( entry[col] )}
+                                  </td>
+                                ))}
+                                <td className="actions-cell">
                                   {isEditing ? (
-                                    <input type="number" step="0.01" name={col} value={editingEntry[col] ?? ''} onChange={handleEditChange} style={{ width: '80px' }} />
-                                  ) : ( entry[col] )}
+                                    <>
+                                      <button onClick={handleUpdateRateEntry} className="btn-icon" title="Save"><Save size={16} /></button>
+                                      <button onClick={() => setEditingEntry(null)} className="btn-icon" title="Cancel"><XCircle size={16} /></button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => setEditingEntry({ ...entry })} className="btn-icon" title="Edit Rate Entry"><Edit size={16} /></button>
+                                      <button onClick={() => handleDeleteRateEntry(entry.id)} className="btn-icon btn-danger" title="Delete Rate Entry"><Trash2 size={16} /></button>
+                                    </>
+                                  )}
                                 </td>
-                              ))}
-                              <td className="actions-cell">
-                                {isEditing ? (
-                                  <>
-                                    <button onClick={handleUpdateRateEntry} className="btn-icon" title="Save"><Save size={16} /></button>
-                                    <button onClick={() => setEditingEntry(null)} className="btn-icon" title="Cancel"><XCircle size={16} /></button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button onClick={() => setEditingEntry({ ...entry })} className="btn-icon" title="Edit Rate Entry"><Edit size={16} /></button>
-                                    <button onClick={() => handleDeleteRateEntry(entry.id)} className="btn-icon btn-danger" title="Delete Rate Entry"><Trash2 size={16} /></button>
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                       : (
-                        <tr><td colSpan={priceColumns.length + 4} style={{ textAlign: 'center' }}>No rate entries found for this rate card.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                              </tr>
+                            );
+                          })
+                         : (
+                          <tr><td colSpan={priceColumns.length + 4} style={{ textAlign: 'center' }}>No rate entries found for this rate card.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>

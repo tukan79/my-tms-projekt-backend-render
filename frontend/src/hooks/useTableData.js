@@ -1,5 +1,5 @@
 // frontend/src/hooks/useTableData.js
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
 // Funkcja pomocnicza do pobierania wartości z zagnieżdżonych obiektów
 const getNestedValue = (obj, path) => {
@@ -36,13 +36,13 @@ export const useTableData = (initialData = [], { initialSortKey, filterKeys = []
     return sortableData;
   }, [initialData, sortConfig]); // Zależność od initialData i sortConfig
 
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
     }
     setSortConfig({ key, direction });
-  };
+  }, [sortConfig]);
 
   const sortedAndFilteredData = useMemo(() => {
     if (!filterText) return sortedData;

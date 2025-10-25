@@ -1,368 +1,333 @@
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import api from '../services/api';
+import React, { useMemo, useEffect } from 'react';
+import { X, Trash2 } from 'lucide-react';
+import { useForm } from '@/hooks/useForm.js';
+import api from '@/services/api.js';
+import { useToast } from '@/contexts/ToastContext.jsx';
 
-// Zdefiniowanie stanu początkowego poza komponentem, aby uniknąć jego ponownego tworzenia przy każdym renderowaniu.
-const initialFormData = { 
-  order_number: '',
+// Przywrócona, pełna struktura danych dla formularza zlecenia
+const initialFormData = {
   customer_id: '',
-  service_level: 'A', // Domyślnie 'Next Day'
+  order_number: '',
   customer_reference: '',
+  service_level: 'A',
   status: 'nowe',
-  sender_details: { name: '', address1: '', address2: '', townCity: '', postCode: '', contact_person: '', phone_number: '' },
-  loading_date_time: '',
-  recipient_details: { name: '', address1: '', address2: '', townCity: '', postCode: '', contact_person: '', phone_number: '' },
-  unloading_date_time: '',
-  cargo_details: {
-    description: '',
-    pallets: {
-      full: { count: '', kilos: '', spaces: '' },
-      half: { count: '', kilos: '', spaces: '' },
-      plus_half: { count: '', kilos: '', spaces: '' },
-      quarter: { count: '', kilos: '', spaces: '' },
-      micro: { count: '', kilos: '', spaces: '' },
-    },
-    final_price: '',
+  sender_details: {
+    name: '',
+    address1: '',
+    address2: '',
+    city: '',
+    postCode: '',
+    contactName: '',
+    contactPhone: '',
   },
+  recipient_details: {
+    name: '',
+    address1: '',
+    address2: '',
+    city: '',
+    postCode: '',
+    contactName: '',
+    contactPhone: '',
+  },
+  cargo_details: {
+    pallets: [], // Zmienione na tablicę, aby umożliwić dynamiczne dodawanie
+    total_kilos: 0,
+    total_spaces: 0,
+  },
+  loading_date_time: new Date().toISOString().split('T')[0],
+  unloading_date_time: new Date().toISOString().split('T')[0],
+  unloading_start_time: '',
+  unloading_end_time: '',
+  selected_surcharges: [],
+  notes: '',
+  final_price: '',
 };
-const AddOrderForm = ({ onSuccess, onCancel, itemToEdit, clients = [] }) => {
+
+const AddOrderForm = ({ onSuccess, onCancel, itemToEdit, clients = [], surcharges = [] }) => {
   const isEditMode = Boolean(itemToEdit);
+  const { showToast } = useToast();
 
-  const [formData, setFormData] = useState(initialFormData);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (isEditMode && itemToEdit) {
-      // Głębokie scalenie, aby uniknąć błędów, jeśli brakuje zagnieżdżonych obiektów.
-      // Deep merge to avoid errors if nested objects are missing.
-      setFormData({
-        ...initialFormData, // Zapewnia, że wszystkie klucze istnieją
-        ...itemToEdit,
-        sender_details: { ...initialFormData.sender_details, ...itemToEdit.sender_details },
-        recipient_details: { ...initialFormData.recipient_details, ...itemToEdit.recipient_details },
-        cargo_details: {
-          ...initialFormData.cargo_details, ...itemToEdit.cargo_details,
-          pallets: { ...initialFormData.cargo_details.pallets, ...itemToEdit.cargo_details?.pallets }
-        },
-        status: itemToEdit.status || 'nowe',
-        loading_date_time: itemToEdit.loading_date_time ? new Date(itemToEdit.loading_date_time).toISOString().slice(0, 16) : '',
-        unloading_date_time: itemToEdit.unloading_date_time ? new Date(itemToEdit.unloading_date_time).toISOString().slice(0, 16) : '',
-      });
-    } else {
-      setFormData(initialFormData);
-    }
-  }, [itemToEdit, isEditMode]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const validate = (data) => {
+    const newErrors = {};
+    if (!data.customer_id) newErrors.customer_id = 'Customer is required.';
+    if (!data.sender_details.name) newErrors.sender_name = 'Sender name is required.';
+    if (!data.recipient_details.name) newErrors.recipient_name = 'Recipient name is required.';
+    return newErrors;
   };
 
-  const handleNestedChange = (group, e) => {
-    const { name, value } = e.target;
+  const performSubmit = async (formData) => {
+    const endpoint = isEditMode ? `/api/orders/${itemToEdit.id}` : '/api/orders';
+    const method = isEditMode ? 'put' : 'post';
+    try {
+      await api[method](endpoint, formData);
+      showToast(`Order ${isEditMode ? 'updated' : 'created'} successfully!`, 'success');
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || `Failed to ${isEditMode ? 'update' : 'create'} order.`;
+      showToast(errorMessage, 'error');
+      throw new Error(errorMessage);
+    }
+  };
+  
+  const {
+    formData,
+    setFormData,
+    errors,
+    loading,
+    handleChange,
+    handleNestedChange,
+    handleSubmit,
+  } = useForm({
+    initialState: initialFormData,
+    validate,
+    onSubmit: performSubmit,
+    itemToEdit: useMemo(() => (itemToEdit ? {
+        ...itemToEdit,
+        // OSTATECZNA POPRAWKA: Bezpieczne formatowanie daty, które unika konwersji stref czasowych.
+        // Po prostu "odcinamy" część z godziną, jeśli istnieje.
+        loading_date_time: itemToEdit.loading_date_time
+          ? String(itemToEdit.loading_date_time).split('T')[0]
+          : initialFormData.loading_date_time,
+        unloading_date_time: itemToEdit.unloading_date_time
+          ? String(itemToEdit.unloading_date_time).split('T')[0]
+          : initialFormData.unloading_date_time,
+      } : null
+    ), [itemToEdit]),
+  });
+
+  // Obliczanie sumy miejsc paletowych i wagi
+  useEffect(() => {
+    setFormData(prev => {
+      const palletsRaw = prev.cargo_details?.pallets;
+      const pallets = Array.isArray(palletsRaw)
+        ? palletsRaw
+        : palletsRaw && typeof palletsRaw === 'object'
+          ? Object.entries(palletsRaw).map(([type, d]) => ({
+              type,
+              quantity: Number(d?.quantity ?? d?.count ?? 0) || 0,
+              spaces: Number(d?.spaces ?? 0) || 0,
+              weight: Number(d?.weight ?? 0) || 0,
+            })).filter(p => p.quantity > 0)
+          : [];
+
+      const totalSpaces = pallets.reduce((sum, p) => sum + (Number(p.spaces) * Number(p.quantity)), 0);
+      const totalKilos = pallets.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
+
+      // Zwracamy nowy stan tylko wtedy, gdy coś się zmieniło, aby uniknąć pętli
+      if (prev.cargo_details.total_spaces !== totalSpaces || prev.cargo_details.total_kilos !== totalKilos) {
+        return {
+          ...prev,
+          cargo_details: { ...prev.cargo_details, pallets, total_spaces: totalSpaces, total_kilos: totalKilos }
+        };
+      }
+      return prev; // Zwracamy poprzedni stan, jeśli nic się nie zmieniło
+    });
+  }, [formData?.cargo_details?.pallets]); // Usunięto setFormData z zależności
+
+  const handleSurchargeChange = (e) => {
+    const { value, checked } = e.target;
+    const selectedSurchargeDef = surcharges.find(s => s.code === value);
+
+    setFormData(prev => {
+      let updatedSurcharges = [...(prev.selected_surcharges || [])];
+
+      if (checked) {
+        let newStartTime = prev.unloading_start_time;
+        let newEndTime = prev.unloading_end_time;
+
+        if (selectedSurchargeDef?.requires_time) {
+          // Odznacz inne dopłaty czasowe
+          const timeSurchargeCodes = surcharges.filter(s => s.requires_time).map(s => s.code);
+          updatedSurcharges = updatedSurcharges.filter(code => !timeSurchargeCodes.includes(code));          
+          // Jeśli dopłata to 'BW' (okno czasowe), nie ustawiamy domyślnych czasów od razu,
+          // pozwalamy użytkownikowi wybrać z listy.
+          if (selectedSurchargeDef.code !== 'BW') {
+            newStartTime = selectedSurchargeDef.start_time || prev.unloading_start_time;
+            newEndTime = selectedSurchargeDef.end_time || prev.unloading_end_time;
+          } else {
+            // Dla BW czyścimy czasy, aby użytkownik musiał wybrać z listy
+            newStartTime = '';
+            newEndTime = '';
+          }
+        }
+        updatedSurcharges.push(value);
+        return { ...prev, selected_surcharges: updatedSurcharges, unloading_start_time: newStartTime, unloading_end_time: newEndTime };
+      } else {
+        updatedSurcharges = updatedSurcharges.filter(code => code !== value);
+        // Jeśli odznaczono ostatnią dopłatę czasową, wyczyść czasy
+        const remainingTimeSurcharge = updatedSurcharges.some(code => surcharges.find(s => s.code === code)?.requires_time);
+        const newStartTime = remainingTimeSurcharge ? prev.unloading_start_time : '';
+        const newEndTime = remainingTimeSurcharge ? prev.unloading_end_time : '';
+        return { ...prev, selected_surcharges: updatedSurcharges, unloading_start_time: newStartTime, unloading_end_time: newEndTime };
+      }
+    });
+  };
+
+  const timeWindowOptions = useMemo(() => {
+    const bwSurcharge = surcharges.find(s => s.code === 'BW');
+    if (!formData.selected_surcharges?.includes('BW') || !bwSurcharge?.start_time || !bwSurcharge?.end_time) {
+      return [];
+    }
+
+    const options = [];
+    let start = new Date(`1970-01-01T${bwSurcharge.start_time}`);
+    const endLimit = new Date(`1970-01-01T${bwSurcharge.end_time}`);
+
+    while (new Date(start.getTime() + 4 * 60 * 60 * 1000) <= endLimit) {
+      const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
+      const startTimeStr = start.toTimeString().slice(0, 5);
+      const endTimeStr = end.toTimeString().slice(0, 5);
+      options.push({ value: `${startTimeStr}-${endTimeStr}`, label: `${startTimeStr} - ${endTimeStr}` });
+      start.setHours(start.getHours() + 1);
+    }
+    return options;
+  }, [formData.selected_surcharges, surcharges]);
+
+  const handleTimeWindowChange = (e) => {
+    const [start, end] = e.target.value.split('-');
     setFormData(prev => ({
       ...prev,
-      [group]: {
-        ...prev[group],
-        [name]: value,
-      },
+      unloading_start_time: start,
+      unloading_end_time: end,
     }));
   };
 
-  const handlePalletChange = (e) => {
-    const { name, value, dataset } = e.target;
-    const { palletType, field } = dataset;
+  const handlePalletChange = (index, field, value) => {
+    setFormData(prev => {
+      const currentPallets = Array.isArray(prev?.cargo_details?.pallets) ? prev.cargo_details.pallets : [];
+      const newPallets = [...currentPallets];
+      newPallets[index] = { ...newPallets[index], [field]: value };
+      return {
+        ...prev,
+        cargo_details: { ...prev.cargo_details, pallets: newPallets },
+      };
+    });
+  };
 
-    const newPalletData = {
-      ...formData.cargo_details.pallets[palletType],
-      [field]: value ? parseInt(value, 10) : ''
-    };
-
-    // Jeśli użytkownik wpisuje 'count', a 'spaces' jest puste, automatycznie uzupełnij 'spaces'.
-    if (field === 'count' && (newPalletData.spaces === '' || newPalletData.spaces === 0)) {
-      newPalletData.spaces = newPalletData.count;
-    }
-
+  const addPalletRow = () => {
     setFormData(prev => ({
       ...prev,
       cargo_details: {
         ...prev.cargo_details,
-        pallets: {
-          ...prev.cargo_details.pallets,
-          [palletType]: newPalletData
-        },
-      }
-    }));
-  };
-
-  const handleClientSelect = (e) => {
-    const selectedClientId = e.target.value;
-    const selectedClient = clients.find(c => c.id === parseInt(selectedClientId, 10));
-
-    setFormData(prev => ({
-      ...prev,
-      customer_id: selectedClientId,
-      sender_details: selectedClient ? {
-        ...prev.sender_details,
-        name: selectedClient.name,
-        address1: selectedClient.address || '',
-        // Możesz tu dodać więcej pól, jeśli klient ma je zdefiniowane
-      } : prev.sender_details,
-    }));
-  };
-
-  const validateForm = () => {
-    const newErrors = { sender_details: {}, recipient_details: {}, cargo_details: {} };
-
-    // Walidacja pól wymaganych
-    if (!formData.customer_reference) newErrors.customer_reference = 'Customer reference is required.';
-    if (!formData.sender_details.name) newErrors.sender_details.name = 'Name is required.';
-    if (!formData.sender_details.townCity) newErrors.sender_details.townCity = 'City is required.';
-    if (!formData.loading_date_time) newErrors.loading_date_time = 'Loading date and time are required.';
-
-    if (!formData.recipient_details.name) newErrors.recipient_details.name = 'Name is required.';
-    if (!formData.recipient_details.townCity) newErrors.recipient_details.townCity = 'City is required.';
-    if (!formData.unloading_date_time) newErrors.unloading_date_time = 'Unloading date and time are required.';
-
-    // Walidacja logiczna dat
-    if (formData.loading_date_time && formData.unloading_date_time) {
-      const loadingDate = new Date(formData.loading_date_time);
-      const unloadingDate = new Date(formData.unloading_date_time);
-      if (unloadingDate <= loadingDate) {
-        newErrors.unloading_date_time = 'Unloading date must be later than loading date.';
-      }
-    }
-
-    setErrors(newErrors);
-    // Zwraca true, jeśli obiekt błędów jest pusty (poza zagnieżdżonymi pustymi obiektami)
-    return Object.values(newErrors).every(val => typeof val !== 'string' && Object.keys(val).length === 0);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) {
-      return; // Zatrzymaj, jeśli walidacja nie przeszła
-    }
-
-    setLoading(true);
-    setErrors({});
-
-    // Obliczanie sumy wagi ze wszystkich typów palet
-    const totalKilos = Object.values(formData.cargo_details.pallets).reduce((sum, pallet) => {
-      return sum + (Number(pallet.kilos) || 0);
-    }, 0);
-    
-    const totalSpaces = Object.values(formData.cargo_details.pallets).reduce((sum, pallet) => {
-      return sum + (Number(pallet.spaces) || 0);
-    }, 0);
-
-    const dataToSend = {
-      ...formData,
-      loading_date_time: new Date(formData.loading_date_time).toISOString(),
-      unloading_date_time: new Date(formData.unloading_date_time).toISOString(),
-      cargo_details: {
-        ...formData.cargo_details,
-        total_kilos: totalKilos,
-        total_spaces: totalSpaces,
+        pallets: [...(Array.isArray(prev?.cargo_details?.pallets) ? prev.cargo_details.pallets : []), { type: 'full', quantity: 1, weight: 0, spaces: 1 }],
       },
-    };
+    }));
+  };
 
-    const request = isEditMode
-      ? api.put(`/api/orders/${itemToEdit.id}`, dataToSend)
-      : api.post('/api/orders', dataToSend);
-
-    try {
-      await request;
-      onSuccess();
-      onCancel(); // Close form on success
-    } catch (err) {
-      const errorMessage = err.response?.data?.error || `An error occurred while ${isEditMode ? 'updating' : 'adding'} the order.`;
-      setErrors({ form: errorMessage }); // Set a general form error
-      console.error(`Error ${isEditMode ? 'updating' : 'adding'} order:`, err);
-    } finally {
-      setLoading(false);
-    }
+  const removePalletRow = (index) => {
+    setFormData(prev => {
+      const currentPallets = Array.isArray(prev?.cargo_details?.pallets) ? prev.cargo_details.pallets : [];
+      const newPallets = currentPallets.filter((_, i) => i !== index);
+      return { ...prev, cargo_details: { ...prev.cargo_details, pallets: newPallets } };
+    });
   };
 
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2>{isEditMode ? 'Edit Order' : 'Add New Order'}</h2>
-        <button onClick={onCancel} className="btn-icon">
-          <X size={20} />
-        </button>
+        <button onClick={onCancel} className="btn-icon"><X size={20} /></button>
       </div>
+      <form onSubmit={handleSubmit} className="form" style={{ maxHeight: '80vh', overflowY: 'auto', paddingRight: '1rem' }}>
+        <div className="form-grid">
+          {/* General Info */}
+          <div className="form-group form-span-2"><label>Customer *</label><select name="customer_id" value={formData.customer_id} onChange={handleChange} required><option value="">Select a customer...</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div className="form-group"><label>Order Number</label><input type="text" name="order_number" value={formData.order_number} onChange={handleChange} /></div>
+          <div className="form-group"><label>Customer Reference</label><input type="text" name="customer_reference" value={formData.customer_reference} onChange={handleChange} /></div>
+          <div className="form-group"><label>Service Level</label><select name="service_level" value={formData.service_level} onChange={handleChange}><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+          <div className="form-group"><label>Status</label><select name="status" value={formData.status} onChange={handleChange}><option value="nowe">New</option><option value="w trakcie">In Progress</option><option value="zakończone">Completed</option><option value="anulowane">Cancelled</option></select></div>
+        </div>
 
-      {errors.form && <div className="error-message">{errors.form}</div>}
-
-      <form onSubmit={handleSubmit} className="form form-grid">
-        {/* Left Column */}
-        <div className="form-column">
-          <div className="form-group">
-            <label>Consignment Number</label>
-            <input type="text" name="order_number" value={formData.order_number ?? ''} onChange={handleChange} />
-            {errors.order_number && <span className="error-text">{errors.order_number}</span>}
+        <div className="form-grid">
+          {/* Sender Details */}
+          <div className="form-column">
+            <h4>Sender Details</h4>
+            <div className="form-group"><label>Name *</label><input type="text" name="name" value={formData.sender_details.name} onChange={e => handleNestedChange('sender_details', e)} required /></div>
+            <div className="form-group"><label>Address 1</label><input type="text" name="address1" value={formData.sender_details.address1} onChange={e => handleNestedChange('sender_details', e)} /></div>
+            <div className="form-group"><label>Postcode</label><input type="text" name="postCode" value={formData.sender_details.postCode} onChange={e => handleNestedChange('sender_details', e)} /></div>
+            <div className="form-group"><label>Loading Date</label><input type="date" name="loading_date_time" value={formData.loading_date_time} onChange={handleChange} /></div>
           </div>
-          <div className="form-group">
-            <label>Customer Reference *</label>
-            <input type="text" name="customer_reference" value={formData.customer_reference ?? ''} onChange={handleChange} required />
-            {errors.customer_reference && <span className="error-text">{errors.customer_reference}</span>}
-          </div>
-          <div className="form-group">
-            <label>Status</label>
-            <select name="status" value={formData.status ?? 'nowe'} onChange={handleChange} required>
-              <option value="nowe">New</option>
-              <option value="zaplanowane">Planned</option>
-              <option value="w trakcie">In Progress</option>
-              <option value="zakończone">Completed</option>
-              <option value="anulowane">Cancelled</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Service Level *</label>
-            <select name="service_level" value={formData.service_level ?? 'A'} onChange={handleChange} required>
-              <option value="A">A (Next Day)</option>
-              <option value="B">B (Economy)</option>
-              <option value="C">C (Economy 3-day)</option>
-              <option value="D">D (Saturday)</option>
-            </select>
-          </div>
-
-          <h4>Loading / Sender</h4>
-          <div className="form-group">
-            <label>Client *</label>
-            <select name="customer_id" value={formData.customer_id} onChange={handleClientSelect} required>
-              <option value="">-- Select a client --</option>
-              {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Sender Name (if different from client)</label>
-            <input type="text" name="name" value={formData.sender_details.name ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-            {errors.sender_details?.name && <span className="error-text">{errors.sender_details.name}</span>}
-          </div>
-          <div className="form-group">
-            <label>Street Address 1</label>
-            <input type="text" name="address1" value={formData.sender_details.address1 ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Street Address 2</label>
-            <input type="text" name="address2" value={formData.sender_details.address2 ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>City *</label>
-            <input type="text" name="townCity" value={formData.sender_details.townCity ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} required />
-            {errors.sender_details?.townCity && <span className="error-text">{errors.sender_details.townCity}</span>}
-          </div>
-          <div className="form-group">
-            <label>Postcode</label>
-            <input type="text" name="postCode" value={formData.sender_details.postCode ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Contact Person</label>
-            <input type="text" name="contact_person" value={formData.sender_details.contact_person ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Phone Number</label>
-            <input type="tel" name="phone_number" value={formData.sender_details.phone_number ?? ''} onChange={(e) => handleNestedChange('sender_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Loading Date & Time *</label>
-            <input type="datetime-local" name="loading_date_time" value={formData.loading_date_time ?? ''} onChange={handleChange} required />
-            {errors.loading_date_time && <span className="error-text">{errors.loading_date_time}</span>}
+          {/* Recipient Details */}
+          <div className="form-column">
+            <h4>Recipient Details</h4>
+            <div className="form-group"><label>Name *</label><input type="text" name="name" value={formData.recipient_details.name} onChange={e => handleNestedChange('recipient_details', e)} required /></div>
+            <div className="form-group"><label>Address 1</label><input type="text" name="address1" value={formData.recipient_details.address1} onChange={e => handleNestedChange('recipient_details', e)} /></div>
+            <div className="form-group"><label>Postcode</label><input type="text" name="postCode" value={formData.recipient_details.postCode} onChange={e => handleNestedChange('recipient_details', e)} /></div>
+            <div className="form-group"><label>Unloading Date</label><input type="date" name="unloading_date_time" value={formData.unloading_date_time} onChange={handleChange} /></div>
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="form-column">
-          <h4>Unloading</h4>
-          <div className="form-group">
-            <label>Recipient Name *</label>
-            <input type="text" name="name" value={formData.recipient_details.name ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} required />
-            {errors.recipient_details?.name && <span className="error-text">{errors.recipient_details.name}</span>}
-          </div>
-          <div className="form-group">
-            <label>Street Address 1</label>
-            <input type="text" name="address1" value={formData.recipient_details.address1 ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Street Address 2</label>
-            <input type="text" name="address2" value={formData.recipient_details.address2 ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>City *</label>
-            <input type="text" name="townCity" value={formData.recipient_details.townCity ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} required />
-            {errors.recipient_details?.townCity && <span className="error-text">{errors.recipient_details.townCity}</span>}
-          </div>
-          <div className="form-group">
-            <label>Postcode</label>
-            <input type="text" name="postCode" value={formData.recipient_details.postCode ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Contact Person</label>
-            <input type="text" name="contact_person" value={formData.recipient_details.contact_person ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Phone Number</label>
-            <input type="tel" name="phone_number" value={formData.recipient_details.phone_number ?? ''} onChange={(e) => handleNestedChange('recipient_details', e)} />
-          </div>
-          <div className="form-group">
-            <label>Unloading Date & Time *</label>
-            <input type="datetime-local" name="unloading_date_time" value={formData.unloading_date_time ?? ''} onChange={handleChange} required />
-            {errors.unloading_date_time && <span className="error-text">{errors.unloading_date_time}</span>}
-          </div>
-        </div>
-
-        {/* Bottom Row - Full Width */}
-        <div className="form-span-2">
-          <h4>Cargo Details</h4>
-          <div className="form-group">
-            <label>Cargo Description</label>
-            <textarea name="description" value={formData.cargo_details.description ?? ''} onChange={(e) => handleNestedChange('cargo_details', e)} rows="2"></textarea>
-          </div>
-          
-          {/* Nowa sekcja dla palet */}
-          <div className="pallet-details-grid">
-            <div className="grid-header">Pallet Type</div>
-            <div className="grid-header">Count</div>
-            <div className="grid-header">Weight (kg)</div>
-            <div className="grid-header">Spaces</div>
-
-            {Object.keys(formData.cargo_details.pallets).map(type => (
-              <React.Fragment key={type}>
-                <div className="pallet-type-label">
-                  {type === 'plus_half' 
-                    ? '+Half' 
-                    : type.charAt(0).toUpperCase() + type.slice(1)}
-                </div>
-                <div className="form-group">
-                  <input type="number" data-pallet-type={type} data-field="count" value={formData.cargo_details.pallets[type]?.count ?? ''} onChange={handlePalletChange} />
-                </div>
-                <div className="form-group">
-                  <input type="number" data-pallet-type={type} data-field="kilos" value={formData.cargo_details.pallets[type]?.kilos ?? ''} onChange={handlePalletChange} />
-                </div>
-                <div className="form-group">
-                  <input type="number" data-pallet-type={type} data-field="spaces" value={formData.cargo_details.pallets[type]?.spaces ?? ''} onChange={handlePalletChange} />
-                </div>
-              </React.Fragment>
+        {/* Cargo Details */}
+        <h4>Cargo Details</h4>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Quantity</th>
+              <th>Weight (kg)</th>
+              <th>Spaces</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(Array.isArray(formData?.cargo_details?.pallets) ? formData.cargo_details.pallets : []).map((pallet, index) => (
+              <tr key={index}>
+                <td><select value={pallet.type} onChange={e => handlePalletChange(index, 'type', e.target.value)}><option value="micro">Micro</option><option value="quarter">Quarter</option><option value="half">Half</option><option value="half_plus">Half Plus</option><option value="full">Full</option></select></td>
+                <td><input type="number" value={pallet.quantity} onChange={e => handlePalletChange(index, 'quantity', e.target.value)} min="1" /></td>
+                <td><input type="number" value={pallet.weight} onChange={e => handlePalletChange(index, 'weight', e.target.value)} min="0" /></td>
+                <td><input type="number" step="0.1" value={pallet.spaces} onChange={e => handlePalletChange(index, 'spaces', e.target.value)} min="0" /></td>
+                <td><button type="button" onClick={() => removePalletRow(index)} className="btn-icon btn-danger"><Trash2 size={16} /></button></td>
+              </tr>
             ))}
-          </div>
+          </tbody>
+        </table>
+        <button type="button" onClick={addPalletRow} className="btn-secondary" style={{ marginTop: '1rem', alignSelf: 'flex-start' }}>Add Pallet</button>
+
+        <div className="form-grid">
+          <div className="form-group"><label>Total Weight (kg)</label><input type="number" name="total_kilos" value={formData.cargo_details.total_kilos} readOnly disabled /></div>
+          <div className="form-group"><label>Total Spaces</label><input type="number" name="total_spaces" value={formData.cargo_details.total_spaces} readOnly disabled /></div>
         </div>
 
-        <div className="form-span-2">
+        {/* Surcharges */}
+        <h4>Surcharges</h4>
+        {formData.selected_surcharges?.includes('BW') ? (
+          <div className="form-group">
+            <label>4-Hour Window</label>
+            <select onChange={handleTimeWindowChange} value={`${formData.unloading_start_time}-${formData.unloading_end_time}`}>
+              <option value="">-- Select a time window --</option>
+              {timeWindowOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+          </div>
+        ) : formData.selected_surcharges?.some(code => surcharges.find(s => s.code === code)?.requires_time) && (
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Unloading Start Time</label><input type="time" name="unloading_start_time" value={formData.unloading_start_time || ''} onChange={handleChange} />
+            </div>
+            <div className="form-group"><label>Unloading End Time</label><input type="time" name="unloading_end_time" value={formData.unloading_end_time || ''} onChange={handleChange} /></div>
+          </div>
+        )}
+        <div className="surcharge-options">
+          {surcharges.map(s => (
+            <div key={s.id} className="form-group-checkbox">
+              <input type="checkbox" id={`surcharge-${s.code}`} value={s.code} checked={formData.selected_surcharges.includes(s.code)} onChange={handleSurchargeChange} />
+              <label htmlFor={`surcharge-${s.code}`}>{s.name}</label>
+            </div>
+          ))}
+        </div>
+
+        {/* Pricing and Notes */}
+        <div className="form-grid">
+          <div className="form-group"><label>Notes</label><textarea name="notes" value={formData.notes || ''} onChange={handleChange} /></div>
           <div className="form-group">
             <label>Final Price (£)</label>
-            <input type="number" step="0.01" name="final_price" value={formData.final_price ?? ''} onChange={handleChange} placeholder="Calculated automatically or enter manually" />
+            <input type="number" step="0.01" name="final_price" value={formData.final_price} onChange={handleChange} placeholder={formData.calculated_price || 'Auto-calculated'} />
+            {formData.calculated_price && <small>Calculated: £{formData.calculated_price}</small>}
           </div>
         </div>
-
-        <div className="form-actions form-span-2">
-          <button type="button" onClick={onCancel} className="btn-secondary" disabled={loading}>
-            Cancel
-          </button>
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading ? (isEditMode ? 'Saving...' : 'Adding...') : (isEditMode ? 'Save Changes' : 'Add Order')}
+        <div className="form-actions">
+          <button type="button" onClick={onCancel} className="btn-secondary" disabled={loading}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Add Order')}
           </button>
         </div>
       </form>

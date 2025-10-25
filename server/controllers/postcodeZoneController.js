@@ -95,7 +95,12 @@ exports.exportZones = async (req, res, next) => {
 
 exports.importZones = async (req, res, next) => {
   try {
-    const result = await zoneService.importZones(req.body);
+    // Oczekujemy, że dane będą w obiekcie pod kluczem zdefiniowanym w `postDataKey`
+    const zonesData = req.body.zones || req.body;
+    if (!Array.isArray(zonesData)) {
+      return res.status(400).json({ error: 'Invalid data format. Expected an array of zones.' });
+    }
+    const result = await zoneService.importZones(zonesData);
     res.status(201).json({ message: `Successfully imported ${result.count} zones.`, ...result });
   } catch (error) {
     next(error);

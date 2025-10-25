@@ -1,154 +1,263 @@
-// Plik server/controllers/rateCardController.js
-const rateCardService = require('../services/rateCardService.js');
-const Papa = require('papaparse');
+// Plik: server/controllers/rateCardController.js
+const rateCardService = require('../services/rateCardService');
+const util = require('util'); // Importujemy moduł 'util'
 
-// --- Rate Card Controllers ---
+// Helper function for consistent logging
+const log = (level, context, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    level,
+    context: `RateCardController.${context}`,
+    message
+  };
+  
+  if (data) {
+    logEntry.data = data;
+  }
+  
+  console.log(JSON.stringify(logEntry, null, 2));
+};
 
-exports.getAllRateCards = async (req, res, next) => {
+const getAllRateCards = async (req, res, next) => {
+  const context = 'getAllRateCards';
   try {
+    log('INFO', context, 'Fetching all rate cards');
     const rateCards = await rateCardService.findAllRateCards();
+    log('INFO', context, `Successfully fetched ${rateCards.length} rate cards`);
     res.json(rateCards);
   } catch (error) {
+    log('ERROR', context, 'Error fetching rate cards', { error: error.message });
     next(error);
   }
 };
 
-exports.createRateCard = async (req, res, next) => {
+const createRateCard = async (req, res, next) => {
+  const context = 'createRateCard';
   try {
+    log('INFO', context, 'Creating new rate card', { body: req.body });
     const newRateCard = await rateCardService.createRateCard(req.body);
+    log('INFO', context, 'Successfully created rate card', { id: newRateCard.id, name: newRateCard.name });
     res.status(201).json(newRateCard);
   } catch (error) {
+    log('ERROR', context, 'Error creating rate card', { error: error.message, body: req.body });
     next(error);
   }
 };
 
-exports.deleteRateCard = async (req, res, next) => {
+const updateRateCard = async (req, res, next) => {
+  const context = 'updateRateCard';
   try {
-    const changes = await rateCardService.deleteRateCard(req.params.rateCardId);
-    if (changes === 0) return res.status(404).json({ error: 'Rate card not found.' });
-    res.status(204).send();
+    const { id } = req.params;
+    log('INFO', context, 'Updating rate card', { id, updates: req.body });
+    const updatedRateCard = await rateCardService.updateRateCard(id, req.body);
+    if (!updatedRateCard) {
+      log('WARN', context, 'Rate card not found', { id });
+      return res.status(404).json({ error: 'Rate card not found' });
+    }
+    log('INFO', context, 'Successfully updated rate card', { id: updatedRateCard.id });
+    res.json(updatedRateCard);
   } catch (error) {
+    log('ERROR', context, 'Error updating rate card', { error: error.message, id: req.params.id, body: req.body });
     next(error);
   }
 };
 
-exports.getCustomersForRateCard = async (req, res, next) => {
+const getEntriesByRateCardId = async (req, res, next) => {
+  const context = 'getEntriesByRateCardId';
   try {
-    const customers = await rateCardService.findCustomersForRateCard(req.params.rateCardId);
-    res.json(customers);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.assignCustomer = async (req, res, next) => {
-  try {
-    const { rateCardId, customerId } = req.params;
-    await rateCardService.assignCustomerToRateCard(rateCardId, customerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.unassignCustomer = async (req, res, next) => {
-  try {
-    const { rateCardId, customerId } = req.params;
-    await rateCardService.unassignCustomerFromRateCard(rateCardId, customerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.exportRateEntries = async (req, res, next) => {
-  try {
-    const { rateCardId } = req.params;
-    const entries = await rateCardService.findRateEntriesByCard(rateCardId);
-    const dataToExport = await rateCardService.enrichRateEntriesWithZoneNames(entries);
-
-    // Mapowanie kluczy na bardziej przyjazne nagłówki
-    const fields = [
-      { label: 'Rate Type', value: 'rate_type' },
-      { label: 'Zone Name', value: 'zone_name' },
-      { label: 'Service Level', value: 'service_level' },
-      { label: 'Price Micro', value: 'price_micro' },
-      { label: 'Price Quarter', value: 'price_quarter' },
-      { label: 'Price Half', value: 'price_half' },
-      { label: 'Price Half Plus', value: 'price_half_plus' },
-      { label: 'Price Full 1', value: 'price_full_1' },
-      { label: 'Price Full 2', value: 'price_full_2' },
-      { label: 'Price Full 3', value: 'price_full_3' },
-      { label: 'Price Full 4', value: 'price_full_4' },
-      { label: 'Price Full 5', value: 'price_full_5' },
-      { label: 'Price Full 6', value: 'price_full_6' },
-      { label: 'Price Full 7', value: 'price_full_7' },
-      { label: 'Price Full 8', value: 'price_full_8' },
-      { label: 'Price Full 9', value: 'price_full_9' },
-      { label: 'Price Full 10', value: 'price_full_10' },
-    ];
-
-    // Przygotowujemy dane jako tablicę tablic dla niezawodnego eksportu
-    const header = fields.map(f => f.label);
-    const dataRows = dataToExport.map(row => fields.map(f => row[f.value] ?? ''));
-
-    const csv = Papa.unparse([header, ...dataRows], { header: false }); // Explicitly disable automatic header generation
-
-    res.header('Content-Type', 'text/csv');
-    res.attachment(`rate-card-${rateCardId}-export.csv`);
-    res.send(csv);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.importRateEntries = async (req, res, next) => {
-  try {
-    const { rateCardId } = req.params;
-    const { entries } = req.body;
-    const result = await rateCardService.importRateEntries(rateCardId, entries);
-    res.status(201).json({ message: `Successfully processed ${result.processedCount} entries.`, ...result });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// --- Rate Entry Controllers ---
-
-exports.getEntriesForCard = async (req, res, next) => {
-  try {
-    const entries = await rateCardService.findRateEntriesByCard(req.params.rateCardId);
+    const { id } = req.params;
+    log('INFO', context, 'Fetching rate entries for rate card', { rateCardId: id });
+    const entries = await rateCardService.findEntriesByRateCardId(id);
+    log('INFO', context, `Successfully fetched ${entries.length} rate entries`, { rateCardId: id });
     res.json(entries);
   } catch (error) {
+    log('ERROR', context, 'Error fetching rate entries', { error: error.message, rateCardId: req.params.id });
     next(error);
   }
 };
 
-exports.createEntryForCard = async (req, res, next) => {
+const getCustomersByRateCardId = async (req, res, next) => {
+  const context = 'getCustomersByRateCardId';
   try {
-    const newEntry = await rateCardService.createRateEntry(req.params.rateCardId, req.body);
-    res.status(201).json(newEntry);
+    const { id } = req.params;
+    log('INFO', context, 'Fetching customers for rate card', { rateCardId: id });
+    const customers = await rateCardService.findCustomersByRateCardId(id);
+    log('INFO', context, `Successfully fetched ${customers.length} customers`, { rateCardId: id });
+    res.json(customers);
   } catch (error) {
+    log('ERROR', context, 'Error fetching customers for rate card', { error: error.message, rateCardId: req.params.id });
     next(error);
   }
 };
 
-exports.updateEntry = async (req, res, next) => {
+const assignCustomer = async (req, res, next) => {
+  const context = 'assignCustomer';
   try {
-    const updatedEntry = await rateCardService.updateRateEntry(req.params.entryId, req.body);
-    if (!updatedEntry) return res.status(404).json({ error: 'Rate entry not found.' });
-    res.json(updatedEntry);
+    const { id: rateCardId, customerId } = req.params;
+    log('INFO', context, 'Assigning customer to rate card', { rateCardId, customerId });
+    const assignment = await rateCardService.assignCustomerToRateCard(rateCardId, customerId);
+    log('INFO', context, 'Successfully assigned customer to rate card', { rateCardId, customerId });
+    res.status(201).json(assignment);
   } catch (error) {
+    log('ERROR', context, 'Error assigning customer to rate card', { 
+      error: error.message, 
+      rateCardId: req.params.id, 
+      customerId: req.params.customerId 
+    });
     next(error);
   }
 };
 
-exports.deleteEntry = async (req, res, next) => {
+const assignCustomersBulk = async (req, res, next) => {
+  const context = 'assignCustomersBulk';
   try {
-    const changes = await rateCardService.deleteRateEntry(req.params.entryId);
-    if (changes === 0) return res.status(404).json({ error: 'Rate entry not found.' });
+    const { id: rateCardId } = req.params;
+    const { customerIds } = req.body;
+    log('INFO', context, 'Bulk assigning customers to rate card', { rateCardId, customerIds });
+
+    const result = await rateCardService.assignCustomersToRateCardBulk(rateCardId, customerIds);
+
+    log('INFO', context, 'Successfully bulk assigned customers', { rateCardId, count: result.count });
+    res.status(201).json(result);
+  } catch (error) {
+    log('ERROR', context, 'Error bulk assigning customers', { error: error.message, body: req.body });
+    next(error);
+  }
+};
+
+const unassignCustomer = async (req, res, next) => {
+  const context = 'unassignCustomer';
+  try {
+    const { id: rateCardId, customerId } = req.params;
+    log('INFO', context, 'Unassigning customer from rate card', { rateCardId, customerId });
+    await rateCardService.unassignCustomerFromRateCard(rateCardId, customerId);
+    log('INFO', context, 'Successfully unassigned customer from rate card', { rateCardId, customerId });
     res.status(204).send();
   } catch (error) {
+    log('ERROR', context, 'Error unassigning customer from rate card', { 
+      error: error.message, 
+      rateCardId: req.params.id, 
+      customerId: req.params.customerId 
+    });
     next(error);
   }
+};
+
+const importRateEntries = async (req, res, next) => {
+  const context = 'importRateEntries';
+  try {
+    const { id: rateCardId } = req.params;
+    const { entries } = req.body;
+    
+    log('INFO', context, '=== BACKEND IMPORT START ===', { rateCardId, entryCount: entries ? entries.length : 0 });
+    
+    if (!entries || !Array.isArray(entries)) {
+      log('ERROR', context, 'Invalid data format', { rateCardId, hasEntries: !!entries, isArray: Array.isArray(entries) });
+      return res.status(400).json({ error: 'Invalid data format. "entries" array is required.' });
+    }
+
+    // Detailed logging for import process
+    // Używamy util.inspect, aby zobaczyć pełną zawartość obiektu
+    console.log('First entry sample:', util.inspect(entries[0], { depth: null, colors: true }));
+
+    log('INFO', context, 'Starting rate entries import', { 
+      rateCardId, 
+      entryCount: entries.length,
+      sampleEntry: entries[0] 
+    });
+
+    const result = await rateCardService.importRateEntries(rateCardId, entries);
+    
+    console.log('Import result from service:', util.inspect(result, { depth: null, colors: true }));
+    log('INFO', context, 'Import completed', {
+      rateCardId,
+      processed: result.count,
+      skipped: result.skipped,
+      totalErrors: result.errors ? result.errors.length : 0
+    });
+
+    res.status(201).json({ 
+      message: `Successfully processed ${result.count} rate entries.`, 
+      ...result 
+    });
+    log('INFO', context, '=== BACKEND IMPORT END ===', { rateCardId });
+    
+  } catch (error) {
+    log('ERROR', context, 'Critical error during import', { 
+      error: error.message,
+      stack: error.stack,
+      rateCardId: req.params.id,
+      entryCount: req.body.entries ? req.body.entries.length : 'unknown'
+    });
+    next(error);
+  }
+};
+
+// Debug endpoint to check zone mapping
+const debugZones = async (req, res, next) => {
+  const context = 'debugZones';
+  try {
+    log('INFO', context, 'Debugging zone mapping');
+    const zones = await rateCardService.debugZoneMapping();
+    res.json({ zones });
+  } catch (error) {
+    log('ERROR', context, 'Error debugging zones', { error: error.message });
+    next(error);
+  }
+};
+
+// Check zone mapping for specific CSV data
+const checkZoneMapping = async (req, res, next) => {
+  const context = 'checkZoneMapping';
+  try {
+    const { zoneNames } = req.body; // Array of zone names from CSV
+    log('INFO', context, 'Checking zone mapping for CSV data', { zoneNames });
+    
+    const zones = await rateCardService.getZoneMappingInfo();
+    const zoneMap = new Map(zones.map(z => [z.zone_name.toString(), z.id]));
+    
+    const mappingResult = zoneNames.map(zoneName => ({
+      csvZoneName: zoneName,
+      foundInDb: zoneMap.has(zoneName.toString()),
+      zoneId: zoneMap.get(zoneName.toString()) || null,
+      dbZoneName: zones.find(z => z.zone_name.toString() === zoneName.toString())?.zone_name
+    }));
+
+    const missingZones = mappingResult.filter(r => !r.foundInDb);
+    
+    log('INFO', context, 'Zone mapping check completed', {
+      totalZonesChecked: zoneNames.length,
+      missingZones: missingZones.length,
+      availableZonesInDb: zones.map(z => z.zone_name)
+    });
+
+    res.json({
+      mapping: mappingResult,
+      summary: {
+        total: zoneNames.length,
+        found: zoneNames.length - missingZones.length,
+        missing: missingZones.length,
+        missingZones: missingZones.map(m => m.csvZoneName)
+      },
+      availableZones: zones.map(z => ({ id: z.id, name: z.zone_name }))
+    });
+  } catch (error) {
+    log('ERROR', context, 'Error checking zone mapping', { error: error.message });
+    next(error);
+  }
+};
+
+module.exports = {
+  getAllRateCards,
+  createRateCard,
+  updateRateCard,
+  getEntriesByRateCardId,
+  getCustomersByRateCardId,
+  assignCustomer,
+  unassignCustomer,
+  assignCustomersBulk,
+  importRateEntries,
+  debugZones,
+  checkZoneMapping
 };

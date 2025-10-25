@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import api from '../services/api';
 
 export const useApiResource = (resourceUrl, resourceName = 'resource') => {
@@ -6,32 +6,49 @@ export const useApiResource = (resourceUrl, resourceName = 'resource') => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Używamy useRef do przechowywania stabilnych funkcji
+  const resourceUrlRef = useRef(resourceUrl);
+  const resourceNameRef = useRef(resourceName);
+
+  // Aktualizujemy refy gdy się zmieniają
+  useEffect(() => {
+    resourceUrlRef.current = resourceUrl;
+    resourceNameRef.current = resourceName;
+  }, [resourceUrl, resourceName]);
+
+  // POPRAWIONE: fetchData bez setData w zależnościach
   const fetchData = useCallback(async () => {
-    if (!resourceUrl) return; // Nie wykonuj zapytania, jeśli URL jest nullem
+    const currentUrl = resourceUrlRef.current;
+    const currentName = resourceNameRef.current;
+    
+    if (!currentUrl) return;
+    
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get(resourceUrl);
+      const response = await api.get(currentUrl);
       setData(response.data);
       return response.data;
     } catch (err) {
-      const errorMessage = err.response?.data?.error || `Failed to fetch ${resourceName}.`;
+      const errorMessage = err.response?.data?.error || `Failed to fetch ${currentName}.`;
       setError(errorMessage);
-      throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [resourceUrl, resourceName]);
+  }, []); // ⚠️ PUSTE ZALEŻNOŚCI - używamy refów
 
-  // Automatyczne pobieranie danych przy pierwszym renderowaniu
+  // POPRAWIONE: useEffect tylko z resourceUrl
   useEffect(() => {
     if (resourceUrl) {
       fetchData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resourceUrl]); // Uruchom tylko, gdy zmieni się resourceUrl
+  }, [resourceUrl]); // ⚠️ TYLKO resourceUrl - fetchData jest stabilne
 
+  // POPRAWIONE: createResource ze stabilnymi zależnościami
   const createResource = useCallback(async (resourceData, optimisticUpdate) => {
+    const currentUrl = resourceUrlRef.current;
+    const currentName = resourceNameRef.current;
+    
     let tempId = null;
     if (optimisticUpdate) {
       tempId = `temp-${Date.now()}`;
@@ -42,60 +59,66 @@ export const useApiResource = (resourceUrl, resourceName = 'resource') => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.post(resourceUrl, resourceData);
-      // Replace optimistic data with actual data from server
-      setData(prevData => 
-        prevData.map(item => (item.id === tempId ? response.data : item))
-      );
+      const response = await api.post(currentUrl, resourceData);
+      if (optimisticUpdate) {
+        setData(prevData => 
+          prevData.map(item => (item.id === tempId ? response.data : item))
+        );
+      } else {
+        setData(prevData => [...prevData, response.data]);
+      }
       return response.data;
     } catch (err) {
-      // Revert optimistic update on error
       if (optimisticUpdate) {
         setData(prevData => prevData.filter(item => item.id !== tempId));
       }
-      const errorMessage = err.response?.data?.error || `Failed to create ${resourceName}.`;
+      const errorMessage = err.response?.data?.error || `Failed to create ${currentName}.`;
       setError(errorMessage);
-      throw err;
+      return null;
     } finally {
       setIsLoading(false);
     }
-  }, [resourceUrl, resourceName]);
+  }, []); // ⚠️ PUSTE ZALEŻNOŚCI
 
+  // POPRAWIONE: deleteResource ze stabilnymi zależnościami
   const deleteResource = useCallback(async (resourceId) => {
-    // Przechowujemy usunięty element i jego pozycję, aby móc go przywrócić w razie błędu
+    const currentUrl = resourceUrlRef.current;
+    const currentName = resourceNameRef.current;
+    
     let deletedItem = null;
     let originalIndex = -1;
 
     setData(currentData => {
       originalIndex = currentData.findIndex(item => item.id === resourceId);
-      if (originalIndex === -1) return currentData; // Elementu nie znaleziono
+      if (originalIndex === -1) return currentData;
       deletedItem = currentData[originalIndex];
       return currentData.filter(item => item.id !== resourceId);
     });
 
-    if (originalIndex === -1) return; // Nie wykonuj żądania, jeśli element nie istniał w stanie
+    if (originalIndex === -1) return;
 
     setIsLoading(true);
     setError(null);
     try {
-      await api.delete(`${resourceUrl}/${resourceId}`);
+      await api.delete(`${currentUrl}/${resourceId}`);
     } catch (err) {
-      // Przywróć stan w przypadku błędu
       setData(currentData => {
         const newData = [...currentData];
         newData.splice(originalIndex, 0, deletedItem);
         return newData;
       });
-      const errorMessage = err.response?.data?.error || `Failed to delete ${resourceName}.`;
+      const errorMessage = err.response?.data?.error || `Failed to delete ${currentName}.`;
       setError(errorMessage);
-      throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [resourceUrl, resourceName, setData]);
+  }, []); // ⚠️ PUSTE ZALEŻNOŚCI
 
+  // POPRAWIONE: updateResource ze stabilnymi zależnościami
   const updateResource = useCallback(async (resourceId, resourceData) => {
-    // Przechowujemy oryginalny stan na wypadek błędu
+    const currentUrl = resourceUrlRef.current;
+    const currentName = resourceNameRef.current;
+    
     let originalData = null;
     setData(currentData => {
       originalData = [...currentData];
@@ -107,24 +130,58 @@ export const useApiResource = (resourceUrl, resourceName = 'resource') => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.put(`${resourceUrl}/${resourceId}`, resourceData);
-      // Zastąp danymi z serwera, aby zapewnić spójność
+      const response = await api.put(`${currentUrl}/${resourceId}`, resourceData);
       setData(prevData =>
         prevData.map(item => (item.id === resourceId ? response.data : item))
       );
       return response.data;
     } catch (err) {
-      // Wycofaj zmiany w przypadku błędu
       if (originalData) {
         setData(originalData);
       }
-      const errorMessage = err.response?.data?.error || `Failed to update ${resourceName}.`;
+      const errorMessage = err.response?.data?.error || `Failed to update ${currentName}.`;
       setError(errorMessage);
-      throw err;
+      return null;
     } finally {
       setIsLoading(false);
     }
-  }, [resourceUrl, resourceName, setData]);
+  }, []); // ⚠️ PUSTE ZALEŻNOŚCI
 
-  return { data, isLoading, error, fetchData, createResource, updateResource, deleteResource, setData };
+  const bulkCreateResource = useCallback(async (payload) => {
+    const currentUrl = resourceUrlRef.current;
+    const currentName = resourceNameRef.current;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      // The API for bulk creation might be different, e.g., a specific endpoint
+      const response = await api.post(`${currentUrl}/bulk`, payload);
+      // After a bulk operation, it's safest to just refetch all data
+      fetchData();
+      return { success: true, message: response.data.message || `${currentName} created successfully.` };
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || `Failed to bulk create ${currentName}.`;
+      setError(errorMessage);
+      return { success: false, message: errorMessage };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []); // ⚠️ PUSTE ZALEŻNOŚCI
+
+  // POPRAWIONE: setData jako stabilna funkcja
+  const stableSetData = useCallback((newData) => {
+    setData(newData);
+  }, []);
+
+  return { 
+    data, 
+    isLoading, 
+    error, 
+    fetchData, 
+    createResource, 
+    updateResource, 
+    deleteResource, 
+    bulkCreate: bulkCreateResource,
+    setData: stableSetData 
+  };
 };

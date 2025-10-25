@@ -52,8 +52,39 @@ const deleteAssignment = async (assignmentId) => {
   });
 };
 
+const bulkCreateAssignments = async (run_id, order_ids) => {
+  // Używamy transakcji, aby zapewnić, że wszystkie przypisania zostaną utworzone, albo żadne.
+  return db.withTransaction(async (client) => {
+    // Krok 1: Usuń istniejące przypisania dla tych zleceń, aby uniknąć konfliktów.
+    const deleteSql = 'DELETE FROM assignments WHERE order_id = ANY($1::int[])';
+    await client.query(deleteSql, [order_ids]);
+
+    // Krok 2: Wstaw nowe przypisania.
+    let createdCount = 0;
+    const insertSql = `
+      INSERT INTO assignments (run_id, order_id) VALUES ($1, $2)
+    `; // Usunięto ON CONFLICT, ponieważ stare przypisania są już usunięte.
+
+    for (const order_id of order_ids) {
+      const result = await client.query(insertSql, [run_id, order_id]);
+      createdCount += result.rowCount;
+    }
+
+    // Krok 3: Zaktualizuj status wszystkich przypisanych zleceń na 'zaplanowane'
+    if (order_ids.length > 0) {
+      const updateOrderStatusSql = `
+        UPDATE orders SET status = 'zaplanowane' WHERE id = ANY($1::int[])
+      `;
+      await client.query(updateOrderStatusSql, [order_ids]);
+    }
+
+    return { createdCount };
+  });
+};
+
 module.exports = {
   createAssignment,
   findAllAssignments,
   deleteAssignment,
+  bulkCreateAssignments,
 };

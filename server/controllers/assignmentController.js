@@ -1,16 +1,16 @@
 // Plik server/controllers/assignmentController.js
 const assignmentService = require('../services/assignmentService');
 
-exports.getAllAssignments = async (req, res, next) => {
+const getAllAssignments = async (req, res, next) => {
   try {
-    const assignments = await assignmentService.findAllAssignments();
+    const assignments = await assignmentService.findAllAssignments(); // Changed from findAssignments
     res.json(assignments);
   } catch (error) {
     next(error);
   }
 };
 
-exports.createAssignment = async (req, res, next) => {
+const createAssignment = async (req, res, next) => {
   try {
     const { order_id, run_id, notes } = req.body;
 
@@ -29,10 +29,10 @@ exports.createAssignment = async (req, res, next) => {
   }
 };
 
-exports.deleteAssignment = async (req, res, next) => {
+const deleteAssignment = async (req, res, next) => {
   try {
-    const { assignmentId } = req.params;
-    const changes = await assignmentService.deleteAssignment(assignmentId);
+    const { id } = req.params; // Changed from assignmentId to id to match route
+    const changes = await assignmentService.deleteAssignment(id);
     if (changes === 0) {
       return res.status(404).json({ error: 'Assignment not found or you do not have permission to delete it.' });
     }
@@ -40,4 +40,24 @@ exports.deleteAssignment = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+const bulkCreateAssignments = async (req, res, next) => {
+  try {
+    const { run_id, order_ids } = req.body;
+    if (!run_id || !Array.isArray(order_ids) || order_ids.length === 0) {
+      return res.status(400).json({ error: 'Run ID and a non-empty array of order IDs are required.' });
+    }
+    const result = await assignmentService.bulkCreateAssignments(run_id, order_ids);
+    res.status(201).json({ message: `${result.createdCount} assignments created/updated successfully.`, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getAllAssignments,
+  createAssignment,
+  deleteAssignment,
+  bulkCreateAssignments,
 };

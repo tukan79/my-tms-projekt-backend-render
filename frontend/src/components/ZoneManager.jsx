@@ -1,22 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useApiResource } from '../hooks/useApiResource.js';
 import { useToast } from '../contexts/ToastContext.jsx';
-import { Edit, Trash2, Plus, X, Download, Database } from 'lucide-react';
+import { Edit, Trash2, Plus, X, Download, Upload, ArrowUp, ArrowDown } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import api from '../services/api.js';
+import DataImporter from './DataImporter.jsx';
 
 const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
-  const { 
-    data: zones, 
-    createResource, 
-    updateResource, 
-    deleteResource 
-  } = useApiResource('/api/zones', 'zone', initialZones);
-
+  const { data: zonesFromApi, createResource, updateResource } = useApiResource('/api/zones', 'zone', initialZones);
   const { showToast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
+  const [showImporter, setShowImporter] = useState(false);
   const [formData, setFormData] = useState({ zone_name: '', postcode_patterns: '', is_home_zone: false });
+  
+  const [zones, setZones] = useState(initialZones);
+  const [sortConfig, setSortConfig] = useState({ key: 'zone_name', direction: 'ascending' });
+
+  useEffect(() => {
+    // Sortowanie stref po nazwie
+    const sorted = [...zonesFromApi].sort((a, b) => {      
+      const valA = a.zone_name;
+      const valB = b.zone_name;
+
+      // Używamy wyrażenia regularnego, aby wyodrębnić liczby i tekst
+      const re = /(\d+)|(\D+)/g;
+      const partsA = valA.match(re);
+      const partsB = valB.match(re);
+
+      // Porównujemy części, traktując liczby jako liczby, a tekst jako tekst
+      for (let i = 0; i < Math.min(partsA.length, partsB.length); i++) {
+        const partA = partsA[i];
+        const partB = partsB[i];
+        const numA = parseInt(partA, 10);
+        const numB = parseInt(partB, 10);
+
+        if (!isNaN(numA) && !isNaN(numB)) {
+          if (numA !== numB) {
+            return sortConfig.direction === 'ascending' ? numA - numB : numB - numA;
+          }
+        } else if (partA !== partB) {
+          return sortConfig.direction === 'ascending' ? partA.localeCompare(partB) : partB.localeCompare(partA);
+        }
+      }
+
+      // Jeśli początki są takie same, dłuższa nazwa jest "większa"
+      return sortConfig.direction === 'ascending' ? partsA.length - partsB.length : partsB.length - partsA.length;
+    });
+    setZones(sorted);
+  }, [zonesFromApi, sortConfig]);
+
+  const handleSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
 
   useEffect(() => {
     if (editingZone) {
@@ -66,13 +106,13 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
 
   const handleDelete = async (zoneId) => {
     if (window.confirm('Are you sure you want to delete this zone?')) {
-      try {
-        await deleteResource(zoneId);
-        showToast('Zone deleted.', 'success');
-        if (onRefresh) onRefresh(); // Odśwież dane po usunięciu
-      } catch (error) {
-        showToast(error.response?.data?.error || 'Failed to delete zone.', 'error');
-      }
+    try {
+      await api.delete(`/api/zones/${zoneId}`);
+      showToast('Zone deleted successfully.', 'success');
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete zone.', 'error');
+    }
     }
   };
 
@@ -135,8 +175,32 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
     }
   };
 
+  const importerConfig = {
+    title: 'Import Postcode Zones',
+    apiEndpoint: '/api/zones/import',
+    postDataKey: 'zones', // Backend oczekuje obiektu { zones: [...] }
+    dataMappingFn: (row) => ({
+      zone_name: row.zone_name,
+      postcode_patterns: row.postcode_patterns, // Przekazujemy jako string, backend sobie poradzi
+      is_home_zone: ['true', '1', 'yes'].includes((row.is_home_zone || '').toLowerCase()),
+    }),
+    previewColumns: [
+      { key: 'zone_name', header: 'Zone Name' },
+      { key: 'postcode_patterns', header: 'Postcode Patterns (sample)' },
+      { key: 'is_home_zone', header: 'Home Zone', render: (item) => (item.is_home_zone ? 'Yes' : 'No') },
+    ],
+  };
+
+  const handleImportSuccess = () => {
+    setShowImporter(false);
+    if (onRefresh) {
+      onRefresh();
+    }
+    showToast('Zones imported successfully!', 'success');
+  };
+
   return (
-    <div>
+    <div className="data-table-container">
       <h4>Postcode Zones</h4>
       {!isFormOpen && (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
@@ -146,7 +210,18 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
           <button onClick={handleExport} className="btn-secondary">
             <Download size={16} /> Export
           </button>
+          <button onClick={() => setShowImporter(true)} className="btn-secondary">
+            <Upload size={16} /> Import
+          </button>
         </div>
+      )}
+
+      {showImporter && (
+        <DataImporter
+          {...importerConfig}
+          onSuccess={handleImportSuccess}
+          onCancel={() => setShowImporter(false)}
+        />
       )}
 
       {isFormOpen && (
@@ -171,51 +246,60 @@ const ZoneManager = ({ zones: initialZones = [], onRefresh }) => {
         </form>
       )}
 
-      <DragDropContext onDragEnd={onDragEnd}>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Zone Name</th>
-              <th>Postcode Patterns</th>
-              <th>Home Zone?</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          {zones.map(zone => (
-            <Droppable key={zone.id} droppableId={String(zone.id)}>
-              {(provided, snapshot) => (
-                <tbody ref={provided.innerRef} {...provided.droppableProps} style={{ backgroundColor: snapshot.isDraggingOver ? '#e6f7ff' : 'transparent' }}>
-                  <tr key={zone.id}>
-                    <td>{zone.zone_name}</td>
-                    <td>
-                      <div className="tag-container">
-                        {(zone.postcode_patterns || []).map((pattern, index) => (
-                          <Draggable key={`${zone.id}-${pattern}`} draggableId={`${zone.id}-${pattern}`} index={index}>
-                            {(provided) => (
-                              <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                                <span className="tag draggable-tag">
-                                  {pattern}
-                                  <button onClick={() => handleRemovePattern(zone, pattern)} className="tag-remove-btn"><X size={12} /></button>
-                                </span>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    </td>
-                    <td>{zone.is_home_zone ? 'Yes' : 'No'}</td>
-                    <td className="actions-cell">
-                      <button onClick={() => setEditingZone(zone)} className="btn-icon"><Edit size={16} /></button>
-                      <button onClick={() => handleDelete(zone.id)} className="btn-icon btn-danger"><Trash2 size={16} /></button>
-                    </td>
-                  </tr>
-                </tbody>
-              )}
-            </Droppable>
-          ))}
-        </table>
-      </DragDropContext>
+      <div className="table-wrapper">
+        <DragDropContext onDragEnd={onDragEnd}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort('zone_name')} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Zone Name
+                    {sortConfig.key === 'zone_name' && (
+                      sortConfig.direction === 'ascending' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                    )}
+                  </div>
+                </th>
+                <th>Home Zone?</th>
+                <th>Postcode Patterns</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            {zones.map(zone => (
+              <Droppable key={zone.id} droppableId={String(zone.id)}>
+                {(provided, snapshot) => (
+                  <tbody ref={provided.innerRef} {...provided.droppableProps} style={{ backgroundColor: snapshot.isDraggingOver ? '#e6f7ff' : 'transparent' }}>
+                    <tr key={zone.id}>
+                      <td style={{ width: '80px' }}>{zone.zone_name}</td>
+                      <td>{zone.is_home_zone ? 'Yes' : 'No'}</td>
+                      <td className="tag-cell">
+                        <div className="tag-container">
+                          {(zone.postcode_patterns || []).map((pattern, index) => (
+                            <Draggable key={`${zone.id}-${pattern}`} draggableId={`${zone.id}-${pattern}`} index={index}>
+                              {(provided) => (
+                                <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                                  <span className="tag draggable-tag">
+                                    {pattern}
+                                    <button onClick={() => handleRemovePattern(zone, pattern)} className="tag-remove-btn"><X size={12} /></button>
+                                  </span>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      </td>
+                      <td className="actions-cell">
+                        <button onClick={() => setEditingZone(zone)} className="btn-icon"><Edit size={16} /></button>
+                        <button onClick={() => handleDelete(zone.id)} className="btn-icon btn-danger" title="Delete Zone"><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  </tbody>
+                )}
+              </Droppable>
+            ))}
+          </table>
+        </DragDropContext>
+      </div>
     </div>
   );
 };

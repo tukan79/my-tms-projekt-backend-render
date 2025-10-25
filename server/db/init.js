@@ -11,18 +11,21 @@ const dropAllTables = async () => {
   console.log('🧹 Czyszczenie istniejących tabel i obiektów zależnych...');
   // Usuwamy wszystkie tabele. Użycie CASCADE usunie również triggery i inne zależności.
   const dropTablesSQL = `
+    DROP TABLE IF EXISTS invoice_items CASCADE;
+    DROP TABLE IF EXISTS invoices CASCADE;
     DROP TABLE IF EXISTS rate_entries CASCADE;
     DROP TABLE IF EXISTS rate_cards CASCADE;
     DROP TABLE IF EXISTS postcode_zones CASCADE;
     DROP TABLE IF EXISTS customer_rate_card_assignments CASCADE;
-    DROP TABLE IF EXISTS surcharge_types CASCADE;
     DROP TABLE IF EXISTS assignments CASCADE;
+    DROP TABLE IF EXISTS order_surcharges CASCADE;
     DROP TABLE IF EXISTS runs CASCADE;
     DROP TABLE IF EXISTS orders CASCADE;
     DROP TABLE IF EXISTS trailers CASCADE;
     DROP TABLE IF EXISTS trucks CASCADE;
     DROP TABLE IF EXISTS drivers CASCADE;
     DROP TABLE IF EXISTS users CASCADE;
+    DROP TABLE IF EXISTS surcharge_types CASCADE;
     DROP TABLE IF EXISTS customers CASCADE;
   `;
   await db.query(dropTablesSQL);
@@ -81,6 +84,11 @@ const createTables = async () => {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       is_deleted BOOLEAN DEFAULT FALSE -- Ta kolumna była brakująca
     );
+  `;
+  const addCustomersTrigger = `
+    DROP TRIGGER IF EXISTS update_customers_updated_at ON customers;
+    CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
   `;
 
   const createUsersTable = `
@@ -161,11 +169,7 @@ const createTables = async () => {
       height_m NUMERIC(5, 2),
       weight_kg INT,
       status VARCHAR(50) DEFAULT 'inactive',
-      is_active BOOLEAN DEFAULT FALSE,
-      -- Deprecated columns, kept for potential data migration but can be removed later
-      model VARCHAR(100), -- Deprecated
-      vin VARCHAR(17) UNIQUE, -- Deprecated
-      trailer_type VARCHAR(50), -- Deprecated
+      is_active BOOLEAN DEFAULT FALSE, -- is_active będzie teraz zależeć od statusu
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       is_deleted BOOLEAN DEFAULT FALSE
@@ -188,10 +192,15 @@ const createTables = async () => {
       sender_details JSONB,
       recipient_details JSONB,
       cargo_details JSONB,
-      loading_date_time TIMESTAMP WITH TIME ZONE,
-      unloading_date_time TIMESTAMP WITH TIME ZONE,
+      loading_date_time DATE,
+      unloading_date_time DATE,
+      unloading_start_time TIME,
+      unloading_end_time TIME,
+      selected_surcharges TEXT[], -- Przechowuje kody wybranych dopłat, np. {'bd', 'tlc'}
+      notes TEXT, -- Brakująca kolumna na notatki
       calculated_price NUMERIC(10, 2),
       final_price NUMERIC(10, 2),
+      invoice_id INT REFERENCES invoices(id) ON DELETE SET NULL, -- Nowe pole do śledzenia faktury
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       is_deleted BOOLEAN DEFAULT FALSE
@@ -242,6 +251,21 @@ const createTables = async () => {
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
   `;
 
+  // Tabela łącząca zlecenia z dopłatami
+  const createOrderSurchargesTable = `
+    CREATE TABLE IF NOT EXISTS order_surcharges (
+      id SERIAL PRIMARY KEY,
+      order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      surcharge_type_id INT NOT NULL REFERENCES surcharge_types(id) ON DELETE RESTRICT,
+      calculated_amount NUMERIC(10, 2) NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  // Dla tej tabeli nie dodajemy triggera 'updated_at', ponieważ wpisy są zazwyczaj niezmienne.
+  // W razie potrzeby można go dodać w przyszłości.
+
+
   // Tabele dla zaawansowanych cenników
   const createPostcodeZonesTable = `
     CREATE TABLE IF NOT EXISTS postcode_zones (
@@ -278,8 +302,15 @@ const createTables = async () => {
     CREATE TABLE IF NOT EXISTS customer_rate_card_assignments (
       customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
       rate_card_id INT NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
-      PRIMARY KEY (customer_id, rate_card_id)
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (customer_id) -- Jeden klient może mieć tylko jeden cennik
     );
+  `;
+  const addCustomerRateCardAssignmentsTrigger = `
+    DROP TRIGGER IF EXISTS update_customer_rate_card_assignments_updated_at ON customer_rate_card_assignments;
+    CREATE TRIGGER update_customer_rate_card_assignments_updated_at BEFORE UPDATE ON customer_rate_card_assignments 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
   `;
 
   const createRateEntriesTable = `
@@ -304,32 +335,78 @@ const createTables = async () => {
       price_full_8 NUMERIC(10, 2),
       price_full_9 NUMERIC(10, 2),
       price_full_10 NUMERIC(10, 2),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(rate_card_id, rate_type, zone_id, service_level)
     );
+  `;
+  const addRateEntriesTrigger = `
+    DROP TRIGGER IF EXISTS update_rate_entries_updated_at ON rate_entries;
+    CREATE TRIGGER update_rate_entries_updated_at BEFORE UPDATE ON rate_entries 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
   `;
 
   // Tabele finansowe
   const createSurchargeTypesTable = `
     CREATE TABLE IF NOT EXISTS surcharge_types (
       id SERIAL PRIMARY KEY,
-      name VARCHAR(100) UNIQUE NOT NULL,
-      description TEXT
+      code VARCHAR(10) UNIQUE NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      calculation_method VARCHAR(20) NOT NULL CHECK (calculation_method IN ('per_order', 'per_pallet_space')),
+      amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+      is_automatic BOOLEAN DEFAULT FALSE,
+      requires_time BOOLEAN DEFAULT FALSE NOT NULL,
+      start_time TIME NULL, -- Domyślny czas rozpoczęcia dla dopłaty czasowej
+      end_time TIME NULL,   -- Domyślny czas zakończenia dla dopłaty czasowej
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
 
-  const createOrderSurchargesTable = `
-    CREATE TABLE IF NOT EXISTS order_surcharges (
+  // Tabele do fakturowania
+  const createInvoicesTable = `
+    CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
-      order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      surcharge_type_id INT NOT NULL REFERENCES surcharge_types(id) ON DELETE RESTRICT,
+      invoice_number VARCHAR(50) UNIQUE NOT NULL,
+      customer_id INT NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+      issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      due_date DATE NOT NULL,
+      total_amount NUMERIC(10, 2) NOT NULL,
+      status VARCHAR(50) DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'paid', 'overdue', 'cancelled')),
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      is_deleted BOOLEAN DEFAULT FALSE
+    );
+  `;
+  const addInvoicesTrigger = `
+    DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
+    CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+  `;
+
+  const createInvoiceItemsTable = `
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id SERIAL PRIMARY KEY,
+      invoice_id INT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      order_id INT NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
+      description TEXT,
       amount NUMERIC(10, 2) NOT NULL,
-      notes TEXT
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(invoice_id, order_id) -- Jedno zlecenie może być tylko na jednej fakturze
     );
   `;
 
   try {
     await db.query(createCustomersTable);
+    await db.query(addCustomersTrigger);
     console.log('✅ Tabela "customers" została utworzona.');
+
+    // Poprawka: Tworzymy tabelę `invoices` PRZED tabelą `orders`,
+    // ponieważ `orders` ma klucz obcy do `invoices`.
+    await db.query(createInvoicesTable);
+    await db.query(addInvoicesTrigger);
+    console.log('✅ Tabela "invoices" została utworzona.');
     
     await db.query(createUsersTable);
     await db.query(addUsersTrigger);
@@ -363,6 +440,7 @@ const createTables = async () => {
     console.log('✅ Tabela "surcharge_types" została utworzona.');
 
     await db.query(createOrderSurchargesTable);
+    // Nie ma triggera, więc nie ma drugiego wywołania
     console.log('✅ Tabela "order_surcharges" została utworzona.');
 
     await db.query(createPostcodeZonesTable);
@@ -374,10 +452,25 @@ const createTables = async () => {
     console.log('✅ Tabela "rate_cards" została utworzona.');
 
     await db.query(createCustomerRateCardAssignmentsTable);
+    await db.query(addCustomerRateCardAssignmentsTrigger);
     console.log('✅ Tabela "customer_rate_card_assignments" została utworzona.');
 
     await db.query(createRateEntriesTable);
+    await db.query(addRateEntriesTrigger);
     console.log('✅ Tabela "rate_entries" została utworzona.');
+
+    await db.query(createInvoiceItemsTable);
+    console.log('✅ Tabela "invoice_items" została utworzona.');
+
+    // Dodajemy indeksy dla kluczowych kolumn w celu optymalizacji zapytań
+    // Adding indexes for key columns to optimize queries
+    const addIndexesSQL = `
+      CREATE INDEX IF NOT EXISTS idx_rate_entries_lookup ON rate_entries(rate_card_id, rate_type, zone_id, service_level);
+      CREATE INDEX IF NOT EXISTS idx_customer_assignments_customer ON customer_rate_card_assignments(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
+    `;
+    await db.query(addIndexesSQL);
+    console.log('✅ Indeksy dla kluczowych tabel zostały utworzone.');
 
 
     console.log('🎉 Wszystkie tabele zostały pomyślnie utworzone/zaktualizowane.');
@@ -387,28 +480,39 @@ const createTables = async () => {
   }
 };
 
-const seedAdminUser = async () => {
-  console.log('🌱 Sprawdzam, czy istnieje użytkownik admin...');
+const seedUsers = async () => {
+  console.log('🌱 Seeding test users...');
 
-  const adminEmail = 'admin@test.com';
-  const adminPassword = 'password123';
-  const { rows: users } = await db.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
+  const testUsers = [
+    { email: 'admin@test.com', password: 'password123', role: 'admin', first_name: 'Admin', last_name: 'User' },
+    { email: 'testadmin@test.com', password: 'password123', role: 'admin', first_name: 'Test', last_name: 'Admin' },
+    { email: 'dispatcher@test.com', password: 'password123', role: 'dispatcher', first_name: 'Dispatcher', last_name: 'Test' },
+    { email: 'customer@test.com', password: 'password123', role: 'user', first_name: 'Customer', last_name: 'Test' },
+  ];
 
-  if (users.length > 0) {
-    console.log('ℹ️ Użytkownik admin już istnieje. Pomijam tworzenie.');
-    return;
+  const insertSql = `
+    INSERT INTO users (email, password_hash, role, first_name, last_name)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (email) DO NOTHING;
+  `;
+
+  let createdCount = 0;
+  for (const user of testUsers) {
+    const { rows: existingUsers } = await db.query('SELECT id FROM users WHERE email = $1', [user.email]);
+    if (existingUsers.length === 0) {
+      const password_hash = await bcrypt.hash(user.password, 10);
+      await db.query(insertSql, [user.email, password_hash, user.role, user.first_name, user.last_name]);
+      console.log(`   ✅ Created user: ${user.email} (Role: ${user.role})`);
+      createdCount++;
+    } else {
+      console.log(`   ℹ️ User ${user.email} already exists. Skipping.`);
+    }
   }
 
-  console.log('➕ Tworzę domyślnego użytkownika admin...');
-  const password_hash = await bcrypt.hash(adminPassword, 10);
-  const insertAdminSql = `
-    INSERT INTO users (email, password_hash, role, first_name, last_name)
-    VALUES ($1, $2, 'admin', 'Admin', 'User')
-  `;
-  await db.query(insertAdminSql, [adminEmail, password_hash]);
-  console.log('✅ Domyślny użytkownik admin został utworzony.');
-  console.log('   Email: admin@test.com');
-  console.log('   Hasło: password123');
+  if (createdCount > 0) {
+    console.log(`✅ Finished seeding ${createdCount} new users.`);
+    console.log('   Default password for all new users is: password123');
+  }
 };
 
 const seedInitialData = async () => {
@@ -456,13 +560,46 @@ const seedInitialData = async () => {
   }
 };
 
+const seedSurchargeTypes = async () => {
+  console.log('🌱 Seeding default surcharge types...');
+  try {
+    const surcharges = [
+      { code: 'BD', name: 'Booking-in Delivery', description: 'Surcharge for deliveries requiring a specific booking time.', calculation_method: 'per_order', amount: 20.00, is_automatic: false, requires_time: true, start_time: null, end_time: null },
+      { code: 'RE', name: 'Redelivery', description: 'Surcharge for re-delivering goods.', calculation_method: 'per_pallet_space', amount: 30.00, is_automatic: false, requires_time: false, start_time: null, end_time: null },
+      { code: 'SAT', name: 'Saturday Delivery', description: 'Surcharge for Saturday deliveries.', calculation_method: 'per_order', amount: 40.00, is_automatic: true, requires_time: false, start_time: null, end_time: null },
+      { code: 'PT', name: 'Pre 10:00 Delivery', description: 'Delivery required between 09:00 and 10:00.', calculation_method: 'per_order', amount: 25.00, is_automatic: false, requires_time: true, start_time: '09:00', end_time: '10:00' },
+      { code: 'AM', name: 'Pre 12:00 Delivery', description: 'Delivery required between 09:00 and 12:00.', calculation_method: 'per_order', amount: 10.00, is_automatic: false, requires_time: true, start_time: '09:00', end_time: '12:00' },      
+      { code: 'BW', name: '4-Hour Window', description: 'Delivery within a specified 4-hour window.', calculation_method: 'per_order', amount: 7.50, is_automatic: false, requires_time: true, start_time: '11:00', end_time: '17:00' },
+      { code: 'VU', name: 'Very Urgent', description: 'Surcharge for deliveries within a specific 1-hour time window.', calculation_method: 'per_order', amount: 30.00, is_automatic: false, requires_time: true, start_time: '09:00', end_time: '09:59' },
+      { code: 'TL', name: 'Tail Lift', description: 'Service requires a tail-lift vehicle (no extra charge).', calculation_method: 'per_order', amount: 0.00, is_automatic: false, requires_time: false, start_time: null, end_time: null },
+      { code: 'AZ', name: 'Amazon Delivery', description: 'Identifies an order for an Amazon Fulfillment Center.', calculation_method: 'per_order', amount: 0.00, is_automatic: false, requires_time: false, start_time: null, end_time: null },
+      { code: 'BK', name: 'Booking', description: 'General booking surcharge.', calculation_method: 'per_order', amount: 0.00, is_automatic: false, requires_time: true, start_time: null, end_time: null },
+    ];
+
+    const sql = `
+      INSERT INTO surcharge_types (code, name, description, calculation_method, amount, is_automatic, requires_time, start_time, end_time)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (code) DO NOTHING;
+    `;
+
+    for (const s of surcharges) {
+      await db.query(sql, [s.code, s.name, s.description, s.calculation_method, s.amount, s.is_automatic, s.requires_time, s.start_time, s.end_time]);
+    }
+    console.log('✅ Default surcharge types have been seeded.');
+  } catch (error) {
+    console.error('❌ Error seeding surcharge types:', error);
+    // Nie rzucamy błędu dalej, aby nie przerwać całego procesu inicjalizacji
+  }
+};
+
 const initializeDatabase = async () => {
   try {
     await dropAllTables(); // Najpierw czyścimy bazę
     await setupDatabaseExtensions();
     await createTables();
-    await seedAdminUser();
+    await seedUsers();
     await seedInitialData();
+    await seedSurchargeTypes(); // Dodajemy wywołanie nowej funkcji
     console.log('\n✨ Inicjalizacja bazy danych zakończona pomyślnie!');
   } catch (error) {
     console.error('\n🔥 Wystąpił krytyczny błąd podczas inicjalizacji bazy danych. Proces przerwany.', error);

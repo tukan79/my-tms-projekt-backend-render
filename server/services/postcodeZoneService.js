@@ -46,8 +46,15 @@ const importZones = async (zonesData) => {
     `;
 
     for (const zone of zonesData) {
-      // Konwertujemy string z CSV na tablicę, usuwając puste wpisy
-      const patterns = (zone.postcode_patterns || '').split(';').map(p => p.trim()).filter(Boolean);
+      // Poprawka: Sprawdzamy, czy dane są stringiem (z CSV) czy już tablicą (z innego źródła).
+      let patterns;
+      if (typeof zone.postcode_patterns === 'string') {
+        patterns = zone.postcode_patterns.split(';').map(p => p.trim()).filter(Boolean);
+      } else if (Array.isArray(zone.postcode_patterns)) {
+        patterns = zone.postcode_patterns; // Jeśli to już tablica, użyj jej bezpośrednio.
+      } else {
+        patterns = []; // Domyślnie pusta tablica, jeśli format jest nieznany.
+      }
       const isHomeZone = ['true', 'yes', '1'].includes(String(zone.is_home_zone).toLowerCase());
 
       const result = await client.query(sql, [zone.zone_name, patterns, isHomeZone]);

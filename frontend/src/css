@@ -1,0 +1,1044 @@
+/* Plik: src/index.css */
+
+/* Import czcionek z Google Fonts - MUSI być na górze */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Ustawienie bazowego rozmiaru czcionki dla całej aplikacji */
+html {
+  font-size: 10px;
+  height: 100%;
+  overflow: hidden; /* Zapobiega przewijaniu całego dokumentu */
+}
+
+/* Ustawienia globalne dla całej strony */
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8f9fa;
+  color: #212529;
+  height: 100%;
+  overflow: hidden; /* Zapobiega przewijaniu body */
+}
+
+/* Definicje zmiennych CSS dla łatwiejszego zarządzania kolorami */
+:root {
+  --primary-color: #4a69bd; /* Nowy kolor główny */
+  --primary-color-dark: #3b528f;
+  --danger-color: #e74c3c;
+  --danger-color-dark: #c0392b;
+  --background-color: #f8f9fa;
+  --card-background: #ffffff;
+  --border-color: #dee2e6;
+  --text-color: #212529;
+  --text-color-light: #6c757d;
+  --sidebar-bg: #2c3e50;
+  --sidebar-text: #ecf0f1;
+  --sidebar-active-bg: #34495e;
+}
+
+/* Główny kontener aplikacji, zajmujący całą wysokość i szerokość widoku */
+.app-container {
+  display: flex;
+  height: 100vh; /* Ustawiamy sztywną wysokość na 100% widoku */
+}
+
+/* Sidebar */
+.sidebar {
+  width: 9rem; /* Używamy rem dla lepszej skalowalności */
+  background-color: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  padding: 2rem 1rem;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s ease-in-out;
+}
+
+.sidebar-header {
+  padding: 0 0 1.5rem 0; /* Usunięcie bocznych paddingów */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center; /* Wyrównanie w pionie */
+  justify-content: space-around;
+}
+
+.sidebar-header h4 {
+  margin: 0 0 0.25rem 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sidebar-header p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin: 0;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+}
+
+.sidebar-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 2rem;
+  text-align: center;
+  color: white;
+  display: none;
+}
+
+/* Style dla tytułu sekcji w wąskim pasku */
+.sidebar-section-title { display: none; }
+
+.sidebar-section-icon {
+  display: flex;
+  justify-content: center;
+  color: var(--text-color-light);
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tab, .tab-active {
+  background-color: transparent; /* Usunięcie tła dla nieaktywnych */
+  color: var(--sidebar-text); /* Ujednolicony kolor tekstu */
+  border: none; /* Usunięcie obramowania */
+  padding: 0.75rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  border-radius: 6px; /* Lepsze zaokrąglenie */
+  font-weight: 500;
+}
+
+.sidebar .tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.tab:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.08); /* Subtelniejszy hover */
+}
+
+.tab-active {
+  background-color: var(--sidebar-active-bg);
+  font-weight: bold;
+}
+
+.tabs-container {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  border-bottom: 3px solid transparent;
+  font-weight: 600;
+  color: var(--text-color-light);
+}
+.tab-button.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Kontener głównej zawartości, który rozciąga się, aby wypełnić przestrzeń */
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  overflow-y: auto; /* Kluczowa zmiana: Włączamy przewijanie tylko dla tego kontenera */
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 7rem;
+    padding: 1rem 0.5rem;
+  }
+  
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .form-span-2 {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-actions {
+    flex-direction: column;
+  }
+}
+
+/* Komponenty */
+.card {
+  background-color: var(--card-background);
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); /* Subtelniejszy cień */
+  border: 1px solid var(--border-color);
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.text-muted {
+  color: var(--text-color-light);
+  font-style: italic;
+}
+
+h2 {
+  margin-top: 0;
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.list-item {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.no-results-message {
+  text-align: center;
+  color: var(--text-color-light);
+  margin-top: 1rem;
+}
+
+.error-boundary {
+  padding: 2rem;
+  background-color: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 8px;
+  color: #ef5350;
+  text-align: center;
+}
+
+.error-container {
+  text-align: center;
+  padding: 2rem;
+  background-color: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 8px;
+  color: #ef5350;
+}
+
+.error-message {
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: var(--danger-color);
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #555;
+  font-style: italic;
+}
+
+.global-loading {
+  padding: 1rem;
+  text-align: center;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Style przycisków */
+.btn-primary, .btn-secondary, .btn-danger {
+  border: 1px solid transparent;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-color-dark);
+  transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+  background-color: #a9b5e0;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: #e9ecef;
+  color: #495057;
+  border-color: #ced4da;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #dee2e6;
+}
+
+.btn-danger {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: var(--danger-color-dark);
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: var(--text-color-light);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background-color: #e9ecef;
+  color: var(--text-color);
+}
+
+.btn-icon.btn-danger:hover:not(:disabled) {
+  background-color: #f8d7da;
+  color: var(--danger-color-dark);
+}
+
+.btn-logout {
+  background: none;
+  color: white;
+  padding: 0.5rem;
+}
+
+.btn-logout:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Style formularzy */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.form-group input[type="text"],
+.form-group input[type="tel"],
+.form-group input[type="number"],
+.form-group input[type="datetime-local"],
+.form-group select,
+.form-group textarea {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(74, 105, 189, 0.2);
+}
+
+/* Nowe style dla błędów w formularzach */
+.form-group .input-error {
+  border-color: var(--danger-color);
+}
+
+.form-group .input-error:focus {
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2);
+}
+
+.error-text {
+  color: var(--danger-color);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-span-2 {
+  grid-column: span 2;
+}
+
+/* Style tabel */
+.data-table {
+  border-collapse: collapse;
+  margin-top: 1rem;
+  min-width: max-content; /* Kluczowe dla wymuszenia poziomego przewijania */
+}
+
+/* Nowy kontener dla DataTable, który zapewnia prawidłowy układ flex */
+.data-table-container {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0; /* Kluczowe dla poprawnego działania flexbox z overflow */
+}
+
+.data-table th, .data-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.data-table th:hover {
+  background-color: #f8f9fa;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+
+/* Kontener dla tabel, zapewniający widoczne paski przewijania */
+.table-wrapper {
+  overflow-x: auto; /* Poziome przewijanie zawsze dostępne */
+  overflow-y: auto; /* Pionowe przewijanie w razie potrzeby */
+  width: 100%;
+  flex-grow: 1;
+  min-height: 0;
+
+  /* Wymusza widoczne paski przewijania na Windows */
+  scrollbar-width: thin; /* Dla Firefox - zawsze widoczny */
+  -ms-overflow-style: scrollbar; /* Dla IE/Edge - zawsze widoczny */
+}
+
+/* Dla przeglądarek WebKit (Chrome, Safari, Edge) */
+.table-wrapper::-webkit-scrollbar {
+  width: 12px;  /* Szerokość pionowego paska */
+  height: 12px; /* Wysokość poziomego paska - KLUCZOWE dla poziomego przewijania */
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 6px;
+  border: 2px solid #f1f1f1; /* Dodatkowe odstępy */
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* SPECJALNIE dla poziomego paska - większy i bardziej widoczny */
+.table-wrapper::-webkit-scrollbar-thumb:horizontal {
+  background: #a8a8a8; /* Ciemniejszy dla lepszej widoczności */
+  min-width: 100px; /* Minimalna szerokość "uchwytu" */
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:horizontal:hover {
+  background: #8a8a8a;
+}
+
+.status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* Połączone style dla statusów o tym samym znaczeniu */
+.status.active,
+.status-completed { background-color: #d1e7dd; color: #0f5132; }
+
+.status.inactive,
+.status-cancelled { background-color: #f8d7da; color: #842029; }
+
+/* Pozostałe statusy */
+.status-new { background-color: #cff4fc; color: #055160; }
+.status-planned { background-color: #fff3cd; color: #664d03; }
+.status-in_progress { background-color: #cfe2ff; color: #0a58ca; }
+
+.date-time {
+  font-size: 0.85rem;
+  color: var(--text-color-light);
+}
+
+/* PlanIt Page Styles */
+.planit-container-resizable {
+  height: calc(100vh - 4rem - 70px); /* Upewnij się, że te wartości są poprawne */
+}
+
+.resize-handle {
+  background-color: var(--border-color);
+  transition: background-color 0.2s ease;
+}
+.resize-handle[data-resize-handle-state="hover"],
+.resize-handle[data-resize-handle-state="drag"] {
+  background-color: var(--primary-color);
+}
+.resize-handle[data-panel-group-direction="horizontal"] {
+  width: 4px; /* Upewnij się, że ta wartość jest wystarczająca */
+}
+
+.planit-section, .planit-assignments-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Usunięcie height: 100% pozwoli obu komponentom (PlanItRuns i ActiveRunView)
+     na poprawne wyświetlanie się w kontenerze flex-column. */
+  min-height: 0; /* Kluczowe dla poprawnego działania overflow w potomkach flexbox */
+}
+
+.planit-section h3, .planit-assignments-panel h3 {
+  margin-top: 0;
+  padding-bottom: 0.5rem;
+}
+
+.planit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto; /* Zmieniamy na overflow-y, aby tylko pionowe przewijanie było domyślne */
+  /* Usuwamy flex-grow: 1, aby lista nie rozpychała się na całą wysokość,
+     co pozwoli na wyświetlenie ActiveRunView pod nią.
+     Wysokość będzie teraz zarządzana przez kontener flex. */
+}
+
+.planit-list-item {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.planit-list-item:last-child {
+  border-bottom: none;
+}
+
+.planit-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.planit-list-item.with-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.planit-item-text {
+  flex-grow: 1;
+}
+
+.planit-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.planit-list-item:hover .planit-item-actions {
+  opacity: 1;
+}
+
+/* Styl dla aktywnego przejazdu */
+.planit-list-item.active-run {
+  background-color: var(--primary-color-dark);
+  color: white;
+  border-left: 4px solid #f1c40f; /* Złoty akcent */
+}
+
+.planit-list-item.active-run .capacity-text,
+.planit-list-item.active-run .run-stats {
+  color: #ecf0f1; /* Jaśniejszy tekst dla statystyk */
+}
+
+.active-run-view {
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 4px 12px rgba(74, 105, 189, 0.2);
+}
+
+/* Specjalne style dla tabel w widoku PlanIt, aby były bardziej kompaktowe */
+.planit-section .data-table {
+  font-size: 0.8rem; /* Zmniejszona czcionka */
+}
+
+.planit-section .data-table th,
+.planit-section .data-table td {
+  padding: 0.5rem 0.75rem; /* Zmniejszony padding dla kompaktowości */
+}
+
+.droppable-combination {
+  transition: background-color 0.2s ease;
+}
+.droppable-combination:hover {
+  background-color: #e9ecef;
+}
+
+.planit-controls {
+  margin-bottom: 2rem;
+}
+
+.planit-controls h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.planit-controls p {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: var(--text-color-light);
+}
+
+/* Toast Notification Styles */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  animation: toast-in 0.5s ease;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-success {
+  background-color: #d1e7dd;
+  color: #0f5132;
+}
+
+.toast-error {
+  background-color: #f8d7da;
+  color: #842029;
+}
+
+.toast-icon {
+  margin-right: 1rem;
+}
+
+.toast-message {
+  margin: 0;
+}
+
+.toast-close-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  margin-left: 1.5rem;
+  padding: 0;
+}
+
+/* Styles for scrollable table container in AssignmentPlanner */
+.table-container-scrollable {
+  max-height: 250px; /* Ograniczenie wysokości, aby pasowało do układu */
+  overflow: auto; /* Zmieniono na 'auto', aby obsługiwać obie osie przewijania */
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.selectable-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.selectable-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.selectable-table tbody tr.selected-row {
+  background-color: #cfe2ff; /* Kolor podświetlenia pasujący do statusu 'w-trakcie' */
+  font-weight: bold;
+}
+
+/* Styl dla przeciąganych wierszy w PlanIt */
+.planit-draggable-row {
+  cursor: grab;
+}
+
+/* Nowe style dla siatki w PlanItOrders */
+.planit-table-grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.planit-grid-header, .planit-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 2fr 1fr 1.5fr 2fr 1fr 0.8fr 0.8fr; /* Dopasuj do liczby i szerokości kolumn */
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.planit-grid-header {
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background-color: var(--card-background);
+  z-index: 1;
+}
+
+.planit-grid-body {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.planit-grid-row {
+  cursor: grab;
+}
+
+.planit-grid-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Style dla statystyk przejazdu (waga, palety) */
+.run-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
+  align-items: center;
+}
+
+/* Styl dla podświetlonego wiersza w PlanIt */
+.highlighted-row {
+  background-color: #dbe4ff !important; /* Używamy !important, aby nadpisać inne style tła */
+  font-weight: 500;
+}
+
+/* Styl dla menu kontekstowego */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.context-menu button:hover { background-color: #f8f9fa; }
+
+/* Style dla wskaźników pojemności w przejazdach */
+.run-capacity-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.capacity-indicator {
+  width: 100%;
+}
+
+.capacity-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
+  margin-bottom: 0.25rem;
+}
+
+.capacity-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.capacity-bar {
+  height: 100%;
+  background-color: var(--primary-color);
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
+}
+
+.capacity-bar.overloaded {
+  background-color: var(--danger-color); /* Zmienia kolor paska na czerwony po przekroczeniu limitu */
+}
+
+/* Styl dla podręcznego okienka (tooltip) */
+.tooltip {
+  position: fixed;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  z-index: 1001; /* Wyżej niż inne elementy */
+  pointer-events: none; /* Tooltip nie przechwytuje zdarzeń myszy */
+  white-space: nowrap;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Style dla siatki szczegółów palet */
+.pallet-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.pallet-details-grid .grid-header {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-color-light);
+  padding-bottom: 0.5rem;
+}
+
+.pallet-details-grid .pallet-type-label {
+  font-weight: 500;
+  font-size: 0.9rem; /* Zmniejszona czcionka dla etykiet */
+}
+
+.pallet-details-grid .form-group {
+  margin: 0; /* Resetujemy marginesy, bo gap jest z siatki */
+}
+
+.pallet-details-grid .form-group input {
+  font-size: 0.9rem; /* Zmniejszona czcionka w polach */
+  padding: 0.5rem; /* Zmniejszony padding dla lepszego dopasowania */
+}
+
+/* Style dla kontenera tagów w tabeli */
+.tag-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  background-color: #e9ecef;
+  color: #495057;
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px; /* Bardziej zaokrąglone rogi */
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Style dla przeciąganych tagów */
+.draggable-tag {
+  position: relative;
+  cursor: grab;
+}
+
+.tag-remove-btn {
+  display: none;
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  cursor: pointer;
+  line-height: 16px;
+}
+
+.tag:hover .tag-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Custom Scrollbar Styles */
+/* Sprawia, że paski przewijania są zawsze widoczne i łatwiejsze w użyciu */
+/* Makes scrollbars always visible and easier to use */
+
+/* Dla przeglądarek opartych na WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 12px;  /* Szerokość pionowego paska przewijania */
+  height: 12px; /* Wysokość poziomego paska przewijania */
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1; /* Tło ścieżki paska */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1; /* Kolor samego paska (uchwytu) */
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8; /* Kolor paska po najechaniu */
+}
+
+/* Style dla podsumowania ceny */
+.price-breakdown {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+.price-breakdown h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+.price-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+/* Style dla opcji dopłat */
+.surcharge-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-group-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.form-group-checkbox label {
+  margin-bottom: 0;
+}

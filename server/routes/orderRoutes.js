@@ -9,8 +9,10 @@ router.use(authenticateToken, requireRole(['admin', 'dispatcher']));
 
 router.get('/', orderController.getAllOrders);
 router.post('/', orderController.createOrder);
-router.put('/:orderId', orderController.updateOrder);
-router.delete('/:orderId', orderController.deleteOrder);
-router.post('/import', orderController.importOrders); // Nowa trasa do importu
+router.post('/import', orderController.importOrders);
+router.put('/:id', orderController.updateOrder);
+router.delete('/bulk', orderController.bulkDeleteOrders); // Nowa trasa
+router.delete('/:id', orderController.deleteOrder);
+router.get('/:id/labels', orderController.generateLabels);
 
 module.exports = router;
