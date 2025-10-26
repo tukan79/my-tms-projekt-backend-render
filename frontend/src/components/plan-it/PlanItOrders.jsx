@@ -164,7 +164,7 @@ const PlanItOrders = ({ orders, homeZone, selectedDate }) => {
     e.preventDefault();
     if (!selectedOrderIds.includes(orderId)) setSelectedOrderIds([orderId]);
     setContextMenu({ visible: true, x: e.clientX, y: e.clientY });
-  }, [selectedOrderIds, setSelectedOrderIds, setContextMenu]);
+  }, [selectedOrderIds, setContextMenu, setSelectedOrderIds]);
 
   const handleMouseEnter = useCallback((e, order) => showTooltip(e, (
     <>

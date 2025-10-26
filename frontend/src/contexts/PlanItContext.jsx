@@ -17,8 +17,6 @@ export const usePlanIt = () => {
 export const PlanItProvider = ({ children, initialData = {}, runActions, onAssignmentCreated, onDeleteRequest, bulkAssignOrders: bulkAssignOrdersFromHook }) => {
   const { showToast } = useToast();
   
-  console.log('🔍 PlanItProvider - initialData:', initialData);
-  
   // POPRAWKA: Upewniamy się, że pobieramy assignments z initialData
   const { 
     orders = [], 
@@ -30,17 +28,6 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
     assignments: initialAssignmentsFromData = [], // ZMIANA: assignments zamiast initialAssignments
     zones = [] 
   } = initialData;
-
-  console.log('📊 Data counts:', {
-    orders: orders.length,
-    runs: runs.length,
-    drivers: drivers.length,
-    trucks: trucks.length,
-    trailers: trailers.length,
-    pallets: pallets.length,
-    initialAssignments: initialAssignmentsFromData.length, // ZMIANA
-    zones: zones.length
-  });
 
   // State that was in PlanItPage
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -54,12 +41,7 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
     y: 0,
   });
 
-  // Dodatkowy state do wymuszenia odświeżania
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
   const triggerRefresh = useCallback(() => {
-    console.log('🔄 Manual refresh triggered');
-    setRefreshTrigger(prev => prev + 1);
     if (onAssignmentCreated) {
       onAssignmentCreated();
     }
@@ -69,6 +51,7 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
   const driverMap = useMemo(() => new Map(drivers.map(d => [d.id, d])), [drivers]);
   const truckMap = useMemo(() => new Map(trucks.map(t => [t.id, t])), [trucks]);
   const trailerMap = useMemo(() => new Map(trailers.map(t => [t.id, t])), [trailers]);
+  const orderMap = useMemo(() => new Map(orders.map(o => [o.id, o])), [orders]);
 
   // Memoize assignments grouped by run_id for quick lookups
   const assignmentsByRun = useMemo(() => {
@@ -83,12 +66,10 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
   }, [initialAssignmentsFromData]);
 
   const enrichedRuns = useMemo(() => {
-    console.log('🔄 Computing enrichedRuns...');
     const filteredRuns = runs.filter(run => {
       if (!run.run_date) return false;
       return run.run_date.startsWith(selectedDate);
     });
-    console.log(`📅 Filtered runs for ${selectedDate}:`, filteredRuns.length);
 
     return filteredRuns.map(run => {
       const driver = driverMap.get(run.driver_id);
@@ -97,10 +78,8 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
 
       const runAssignments = assignmentsByRun.get(run.id) || [];
       const assignedOrders = runAssignments
-        .map(a => orders.find(o => o.id === a.order_id))
+        .map(a => orderMap.get(a.order_id))
         .filter(Boolean);
-
-      console.log(`📦 Run ${run.id} assigned orders:`, assignedOrders.length);
 
       const { totalKilos, totalSpaces } = assignedOrders.reduce((acc, order) => {
         acc.totalKilos += order.cargo_details?.total_kilos || 0;
@@ -122,22 +101,16 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
         hasCapacity,
       };
     });
-  }, [runs, selectedDate, driverMap, truckMap, trailerMap, assignmentsByRun, orders, refreshTrigger]);
+  }, [runs, selectedDate, driverMap, truckMap, trailerMap, assignmentsByRun, orderMap]);
 
   // POPRAWKA: Upewniamy się, że przekazujemy poprawne assignments
   const assignmentsData = useMemo(() => {
-    const data = {
+    return {
       initialAssignments: initialAssignmentsFromData, // ZMIANA: initialAssignmentsFromData
       orders,
       enrichedRuns,
       onDataRefresh: triggerRefresh, // ZMIANA: triggerRefresh zamiast onAssignmentCreated
     };
-    console.log('📋 assignmentsData:', {
-      initialAssignments: data.initialAssignments.length,
-      orders: data.orders.length,
-      enrichedRuns: data.enrichedRuns.length
-    });
-    return data;
   }, [initialAssignmentsFromData, orders, enrichedRuns, triggerRefresh]);
 
   const {
@@ -148,12 +121,6 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
     bulkAssignOrders,
     error,
   } = useAssignments(assignmentsData);
-
-  console.log('🎯 useAssignments results:', {
-    assignments: assignments?.length || 0,
-    availableOrders: availableOrders?.length || 0,
-    error: error
-  });
 
   // Obsługa błędów
   React.useEffect(() => {
@@ -174,14 +141,13 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
     const ordersForRun = assignments
       .filter(a => a.run_id === activeRun.id)
       .map(a => {
-        const order = orders.find(o => o.id === a.order_id);
+        const order = orderMap.get(a.order_id);
         return order ? { ...order, assignmentId: a.id } : null;
       })
       .filter(Boolean);
 
-    console.log(`📦 Orders for active run ${activeRun.id}:`, ordersForRun.length);
     return ordersForRun;
-  }, [activeRun, assignments, orders]);
+  }, [activeRun, assignments, orderMap]);
 
   // Handlers that were in PlanItPage
   const handleEditRun = useCallback((run) => {
@@ -334,14 +300,6 @@ export const PlanItProvider = ({ children, initialData = {}, runActions, onAssig
     // Dodajemy funkcję do ręcznego odświeżania
     triggerRefresh,
   };
-
-  console.log('🎯 Final PlanItContext value:', {
-    enrichedRunsCount: value.enrichedRuns.length,
-    availableOrdersCount: value.availableOrders.length,
-    activeRun: value.activeRun?.id,
-    ordersForActiveRunCount: value.ordersForActiveRun.length,
-    selectedOrderIds: value.selectedOrderIds.length
-  });
 
   return <PlanItContext.Provider value={value}>{children}</PlanItContext.Provider>;
 };
