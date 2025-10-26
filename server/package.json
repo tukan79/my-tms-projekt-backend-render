@@ -5,7 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "npm install && node server.js",
     "dev": "NODE_ENV=development nodemon --config nodemon.json server.js",
     "build": "echo \"No build step required for server.\"",
     "test": "jest",
