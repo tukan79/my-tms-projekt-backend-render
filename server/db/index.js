@@ -8,15 +8,25 @@ const getPool = () => {
   if (!pool) {
     console.log('🟡 Tworzenie nowej puli połączeń PostgreSQL...');
     // Pula jest tworzona dopiero przy pierwszym wywołaniu.
-    // Jeśli zmienne środowiskowe są niepoprawne, błąd zostanie rzucony tutaj
-    // i złapany przez blok try...catch w `startServer`.
-    pool = new pg.Pool({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      database: process.env.DB_NAME,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD || null,
-    });
+    
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    const connectionConfig = isProduction
+      ? { // Konfiguracja dla produkcji (np. Render)
+          connectionString: process.env.DATABASE_URL,
+          ssl: {
+            rejectUnauthorized: false
+          }
+        }
+      : { // Konfiguracja dla lokalnego dewelopmentu
+          host: process.env.DB_HOST,
+          port: process.env.DB_PORT,
+          database: process.env.DB_NAME,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD || null,
+        };
+
+    pool = new pg.Pool(connectionConfig);
 
     // Dodajemy nasłuchiwanie na błędy w puli (np. błąd połączenia)
     pool.on('error', (err, client) => {
