@@ -7,7 +7,6 @@
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development nodemon --config nodemon.json server.js",
-    "postinstall": "rm -rf ../node_modules",
     "build": "echo \"No build step required for server.\"",
     "test": "jest",
     "test:watch": "jest --watch",
