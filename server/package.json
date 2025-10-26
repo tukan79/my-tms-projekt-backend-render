@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "prestart": "npm install --prefix . --omit=dev",
     "dev": "NODE_ENV=development nodemon --config nodemon.json server.js",
     "build": "echo \"No build step required for server.\"",
     "test": "jest",
