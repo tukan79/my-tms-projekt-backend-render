@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend for the TMS application with secure transportation management",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development nodemon --config nodemon.json server.js",

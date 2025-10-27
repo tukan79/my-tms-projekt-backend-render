@@ -1,7 +1,7 @@
 // Plik server/controllers/assignmentController.js
-import * as assignmentService from '../services/assignmentService.js';
+const assignmentService = require('../services/assignmentService.js');
 
-export const getAllAssignments = async (req, res, next) => {
+exports.getAllAssignments = async (req, res, next) => {
   try {
     const assignments = await assignmentService.findAllAssignments(); // Changed from findAssignments
     res.json(assignments);
@@ -10,7 +10,7 @@ export const getAllAssignments = async (req, res, next) => {
   }
 };
 
-export const createAssignment = async (req, res, next) => {
+exports.createAssignment = async (req, res, next) => {
   try {
     const { order_id, run_id, notes } = req.body;
 
@@ -36,7 +36,7 @@ export const createAssignment = async (req, res, next) => {
   }
 };
 
-export const deleteAssignment = async (req, res, next) => {
+exports.deleteAssignment = async (req, res, next) => {
   try {
     const { id } = req.params;
     const parsedId = parseInt(id, 10);
@@ -55,7 +55,7 @@ export const deleteAssignment = async (req, res, next) => {
   }
 };
 
-export const bulkCreateAssignments = async (req, res, next) => {
+exports.bulkCreateAssignments = async (req, res, next) => {
   try {
     const { run_id, order_ids } = req.body;
     if (run_id == null || !Array.isArray(order_ids) || order_ids.length === 0) {

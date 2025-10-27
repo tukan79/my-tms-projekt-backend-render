@@ -1,14 +1,13 @@
 // Plik server/server.js - Główny plik startowy serwera
-import { config } from 'dotenv';
 
 // Warunkowo ładujemy dotenv tylko w środowisku deweloperskim.
 // Na produkcji (np. na Render) zmienne są dostarczane bezpośrednio.
 if (process.env.NODE_ENV !== 'production') { 
-  config();
+  require('dotenv').config();
 }
 
-import app from './app.js';
-import db from './db/index.js'; // Importujemy instancję bazy danych
+const app = require('./app.js');
+const db = require('./db/index.js'); // Importujemy instancję bazy danych
 
 // Używamy bardziej specyficznej zmiennej, aby uniknąć konfliktów z globalnym `PORT`
 // Na platformach takich jak Render, aplikacja musi nasłuchiwać na porcie zdefiniowanym w zmiennej środowiskowej `PORT`.

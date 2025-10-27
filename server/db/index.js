@@ -1,5 +1,5 @@
 // Plik server/db/index.js
-import pg from 'pg';
+const pg = require('pg');
 // Nie ma potrzeby wczytywać dotenv tutaj, ponieważ jest już załadowany w głównym pliku server.js
 
 let pool;
@@ -36,7 +36,7 @@ const getPool = () => {
   return pool;
 };
 
-export default {
+module.exports = {
   // `query` to metoda do wykonywania zapytań do bazy danych
   query: (text, params) => getPool().query(text, params),
   // Nowa metoda do testowania połączenia

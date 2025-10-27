@@ -1,8 +1,8 @@
 // Plik server/routes/authRoutes.js
-import express from 'express';
-import { rateLimit } from 'express-rate-limit'; // Zmiana na import destrukturyzowany
-import * as authController from '../controllers/authController.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+const express = require('express');
+const { rateLimit } = require('express-rate-limit'); // Zmiana na import destrukturyzowany
+const authController = require('../controllers/authController.js');
+const { authenticateToken } = require('../middleware/authMiddleware.js');
 
 // Dedykowany limiter dla tras logowania i rejestracji, aby chronić przed atakami brute-force
 // Dedicated limiter for login and registration routes to protect against brute-force attacks
@@ -33,4 +33,4 @@ router.get('/verify', authenticateToken, authController.verifyToken);
 // Server status route (can be moved to another file, e.g., systemRoutes.js)
 router.get('/status', (req, res) => res.status(200).json({ message: 'TMS Server is running correctly! 🚀' }));
 
-export default router;
+module.exports = router;
