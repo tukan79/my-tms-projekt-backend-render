@@ -1,10 +1,11 @@
 // Plik server/server.js - Główny plik startowy serwera
+import { config } from 'dotenv';
+
 // Warunkowo ładujemy dotenv tylko w środowisku deweloperskim.
 // Na produkcji (np. na Render) zmienne są dostarczane bezpośrednio.
-
 if (process.env.NODE_ENV !== 'production') { 
-  await import('dotenv/config');
- }
+  config();
+}
 
 import app from './app.js';
 import db from './db/index.js'; // Importujemy instancję bazy danych
@@ -50,10 +51,14 @@ const gracefulShutdown = () => {
   console.log('🟡 SIGTERM signal received: closing HTTP server.');
   server.close(() => {
     console.log('✅ HTTP server closed.');
-    db.end(() => {
-      console.log('🐘 PostgreSQL pool has been closed.');
+    if (db.end) {
+      db.end(() => {
+        console.log('🐘 PostgreSQL pool has been closed.');
+        process.exit(0);
+      });
+    } else {
       process.exit(0);
-    });
+    }
   });
 };
 
