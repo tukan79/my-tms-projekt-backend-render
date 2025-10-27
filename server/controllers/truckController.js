@@ -100,3 +100,4 @@ exports.deleteTruck = async (req, res, next) => {
     next(error);
   }
 };
+//new commit
