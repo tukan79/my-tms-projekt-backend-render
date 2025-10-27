@@ -1,35 +1,35 @@
 // Plik server/app.js - Konfiguracja aplikacji Express
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
-const compression = require('compression');
-const hpp = require('hpp');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import { rateLimit } from 'express-rate-limit';
+import compression from 'compression';
+import hpp from 'hpp';
 // const csurf = require('csurf'); // Tymczasowo wyłączone, wymaga express-session lub innej konfiguracji
-const logger = require('./config/logger.js'); // Importujemy nasz nowy logger
+import logger from './config/logger.js'; // Importujemy nasz nowy logger
 
 // Importujemy trasy
-const authRoutes = require('./routes/authRoutes.js');
-const driverRoutes = require('./routes/driverRoutes.js');
-const userRoutes = require('./routes/userRoutes.js');
-const truckRoutes = require('./routes/truckRoutes.js');
-const trailerRoutes = require('./routes/trailerRoutes.js');
-const orderRoutes = require('./routes/orderRoutes.js');
-const assignmentRoutes = require('./routes/assignmentRoutes.js');
-const runRoutes = require('./routes/runRoutes.js');
-const customerRoutes = require('./routes/customerRoutes.js');
-const postcodeZoneRoutes = require('./routes/postcodeZoneRoutes.js');
-const rateCardRoutes = require('./routes/rateCardRoutes.js');
-const surchargeTypeRoutes = require('./routes/surchargeTypeRoutes.js');
-const feedbackRoutes = require('./routes/feedbackRoutes.js');
-const invoiceRoutes = require('./routes/invoiceRoutes.js');
+import authRoutes from './routes/authRoutes.js';
+import driverRoutes from './routes/driverRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import truckRoutes from './routes/truckRoutes.js';
+import trailerRoutes from './routes/trailerRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
+import assignmentRoutes from './routes/assignmentRoutes.js';
+import runRoutes from './routes/runRoutes.js';
+import customerRoutes from './routes/customerRoutes.js';
+import postcodeZoneRoutes from './routes/postcodeZoneRoutes.js';
+import rateCardRoutes from './routes/rateCardRoutes.js';
+import surchargeTypeRoutes from './routes/surchargeTypeRoutes.js';
+import feedbackRoutes from './routes/feedbackRoutes.js';
+import invoiceRoutes from './routes/invoiceRoutes.js';
 // ... i tak dalej dla innych zasobów
 
 // Importujemy middleware do obsługi błędów
-const errorMiddleware = require('./middleware/errorMiddleware.js');
-const db = require('./db/index.js');
+import errorMiddleware from './middleware/errorMiddleware.js';
+import db from './db/index.js';
 
 const app = express();
 
@@ -140,4 +140,4 @@ app.use((req, res, next) => {
 
 app.use(errorMiddleware); // Centralny middleware do obsługi błędów
 
-module.exports = app;
+export default app;

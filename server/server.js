@@ -2,12 +2,12 @@
 // Warunkowo ładujemy dotenv tylko w środowisku deweloperskim.
 // Na produkcji (np. na Render) zmienne są dostarczane bezpośrednio.
 
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
+if (process.env.NODE_ENV !== 'production') { 
+  await import('dotenv/config');
+ }
 
-const app = require('./app.js');
-const db = require('./db/index.js'); // Importujemy instancję bazy danych
+import app from './app.js';
+import db from './db/index.js'; // Importujemy instancję bazy danych
 
 // Używamy bardziej specyficznej zmiennej, aby uniknąć konfliktów z globalnym `PORT`
 // Na platformach takich jak Render, aplikacja musi nasłuchiwać na porcie zdefiniowanym w zmiennej środowiskowej `PORT`.
@@ -50,7 +50,7 @@ const gracefulShutdown = () => {
   console.log('🟡 SIGTERM signal received: closing HTTP server.');
   server.close(() => {
     console.log('✅ HTTP server closed.');
-    db.pool.end(() => {
+    db.end(() => {
       console.log('🐘 PostgreSQL pool has been closed.');
       process.exit(0);
     });
