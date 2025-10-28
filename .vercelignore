@@ -1,4 +1,5 @@
 # Ignorujemy pliki, które nie są potrzebne do budowania frontendu
+server/
 *.md
 .gitignore
 .eslintrc.json
