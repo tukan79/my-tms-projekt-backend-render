@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useApiResource } from './useApiResource';
 import { useBroadcastChannel } from './useBroadcastChannel.js';
-import { importerConfig } from '../../../server/config/importerConfig.js';
+import { importerConfig } from '../config/importerConfig.js';
 
 /**
  * Manages the UI state of the dashboard, including the current view,
