@@ -11,7 +11,7 @@
     "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w frontend\"",
     "server-dev": "npm run dev -w server",
     "client-dev": "npm run dev -w frontend",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w server",
     "start": "npm start --workspace=server",
     "clean": "rimraf node_modules server/node_modules frontend/node_modules",
     "db:init": "node server/db/init.js",
