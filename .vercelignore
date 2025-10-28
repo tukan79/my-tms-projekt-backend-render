@@ -1,6 +1,3 @@
-# Ignorujemy cały katalog backendu
-server/
-
 # Ignorujemy pliki, które nie są potrzebne do budowania frontendu
 *.md
 .gitignore
