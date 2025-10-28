@@ -29,3 +29,6 @@ Thumbs.db
 .idea
 .vscode
 *.suo
+
+# Zawsze ignoruj katalogi node_modules na każdym poziomie
+node_modules/

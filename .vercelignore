@@ -1,8 +1,7 @@
+# Ignorujemy cały katalog backendu
 server/
-config/
-migrations/
-models/
+
+# Ignorujemy pliki, które nie są potrzebne do budowania frontendu
 *.md
 .gitignore
 .eslintrc.json
-.npmrc
