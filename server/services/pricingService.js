@@ -1,6 +1,6 @@
 // Plik server/services/pricingService.js
 const { PostcodeZone, CustomerRateCardAssignment, RateEntry, SurchargeType, Sequelize } = require('../models');
-const { Op } = Sequelize;
+const { Op } = Sequelize; // Op jest już importowany z Sequelize
 const logger = require('../config/logger.js');
 
 // Stałe dla typów stawek i poziomów usług

@@ -13,7 +13,13 @@ const getAllUsers = async (req, res, next) => {
 
 const createUser = async (req, res, next) => {
   try {
-    const newUser = await userService.createUser(req.body);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const newUser = await userService.createUser({
+      email: req.body.email,
+      password: req.body.password,
+      firstName: req.body.first_name,
+      lastName: req.body.last_name,
+    });
     res.status(201).json(newUser);
   } catch (error) {
     next(error);
@@ -23,7 +29,13 @@ const createUser = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const updatedUser = await userService.updateUser(userId, req.body);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const updatedUser = await userService.updateUser(userId, {
+      firstName: req.body.first_name,
+      lastName: req.body.last_name,
+      role: req.body.role,
+      password: req.body.password,
+    });
     if (!updatedUser) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -78,7 +90,7 @@ const importUsers = async (req, res, next) => {
 
 const exportUsers = async (req, res, next) => {
   try {
-    const users = await userService.findAllUsers();
+    const users = (await userService.findAllUsers()).map(u => u.get({ plain: true })); // Pobieramy czyste obiekty
     const fields = ['id', 'email', 'firstName', 'lastName', 'role', 'createdAt', 'updatedAt'];
     const csv = Papa.unparse(users, { fields });
 

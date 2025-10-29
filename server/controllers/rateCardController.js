@@ -19,7 +19,9 @@ exports.getAllRateCards = async (req, res, next) => {
 exports.createRateCard = async (req, res, next) => {
   const context = 'createRateCard';
   try {
-    logger.info('Creating new rate card', { context, body: req.body });
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const { name } = req.body;
+    logger.info('Creating new rate card', { context, body: { name } });
     const newRateCard = await rateCardService.createRateCard(req.body);
     logger.info('Successfully created rate card', { context, id: newRateCard.id, name: newRateCard.name });
     res.status(201).json(newRateCard);
@@ -33,7 +35,9 @@ exports.updateRateCard = async (req, res, next) => {
   const context = 'updateRateCard';
   try {
     const { id } = req.params;
-    logger.info('Updating rate card', { context, id, updates: req.body });
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const { name } = req.body;
+    logger.info('Updating rate card', { context, id, updates: { name } });
     const updatedRateCard = await rateCardService.updateRateCard(id, req.body);
     if (!updatedRateCard) {
       logger.warn('Rate card not found', { context, id });

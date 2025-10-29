@@ -16,7 +16,7 @@ exports.getAllTrucks = async (req, res, next) => {
 exports.exportTrucks = async (req, res, next) => {
   try {
     const trucks = await truckService.findTrucksByCompany();
-    const csv = Papa.unparse(trucks);
+    const csv = Papa.unparse(trucks.map(t => t.get({ plain: true }))); // Używamy get({ plain: true })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `trucks_${timestamp}.csv`;
@@ -39,13 +39,23 @@ exports.exportTrucks = async (req, res, next) => {
 exports.createTruck = async (req, res, next) => {
   try {
     const truckData = req.body;
-
-    // Prosta walidacja
     if (!truckData.registration_plate || !truckData.brand) {
       return res.status(400).json({ error: 'Numer rejestracyjny, marka i model są wymagane.' });
     }
     
-    const newTruck = await truckService.createTruck(truckData);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const newTruck = await truckService.createTruck({
+      registrationPlate: truckData.registration_plate,
+      brand: truckData.brand,
+      model: truckData.model,
+      vin: truckData.vin,
+      productionYear: truckData.production_year,
+      typeOfTruck: truckData.type_of_truck,
+      totalWeight: truckData.total_weight,
+      palletCapacity: truckData.pallet_capacity,
+      maxPayloadKg: truckData.max_payload_kg,
+      isActive: truckData.is_active,
+    });
     res.status(201).json(newTruck);
   } catch (error) {
     next(error);
@@ -70,13 +80,24 @@ exports.importTrucks = async (req, res, next) => {
 exports.updateTruck = async (req, res, next) => {
   try {
     const { truckId } = req.params;
-    const truckData = req.body;
 
-    if (!truckData.registration_plate || !truckData.brand) {
+    if (!req.body.registration_plate || !req.body.brand) {
       return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
     }
     
-    const updatedTruck = await truckService.updateTruck(truckId, truckData);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const updatedTruck = await truckService.updateTruck(truckId, {
+      registrationPlate: req.body.registration_plate,
+      brand: req.body.brand,
+      model: req.body.model,
+      vin: req.body.vin,
+      productionYear: req.body.production_year,
+      typeOfTruck: req.body.type_of_truck,
+      totalWeight: req.body.total_weight,
+      palletCapacity: req.body.pallet_capacity,
+      maxPayloadKg: req.body.max_payload_kg,
+      isActive: req.body.is_active,
+    });
 
     if (!updatedTruck) {
       return res.status(404).json({ error: 'Nie znaleziono pojazdu lub nie masz uprawnień do jego edycji.' });

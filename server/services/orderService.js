@@ -1,6 +1,6 @@
 // Plik server/services/orderService.js
 const { Order, Customer, OrderSurcharge, SurchargeType, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { Op } = require('sequelize'); // Op jest już importowany z sequelize
 const pricingService = require('./pricingService.js'); // Upewniamy się, że ścieżka jest jednoznaczna
 
 const createOrder = async (orderData) => {
@@ -215,15 +215,15 @@ const importOrders = async (ordersData) => {
     const ordersToCreateOrUpdate = [];
 
     for (const [index, order] of ordersData.entries()) {
-      const customerId = customerCodeToIdMap.get(order.customerCode); // Używamy camelCase
+      const customerId = customerCodeToIdMap.get(order.customer_code); // Używamy snake_case z CSV
       if (!customerId) {
-        errors.push({ line: index + 2, message: `Customer with code '${order.customerCode}' not found.` });
+        errors.push({ line: index + 2, message: `Customer with code '${order.customer_code}' not found.` });
         continue;
       }
 
       // Calculate price before inserting
       const priceResult = await pricingService.calculateOrderPrice({
-        customerId: customerId,
+        customer_id: customerId, // pricingService oczekuje snake_case
         senderDetails: order.sender_details,
         recipientDetails: order.recipient_details,
         cargoDetails: order.cargo_details,
@@ -236,16 +236,16 @@ const importOrders = async (ordersData) => {
 
       ordersToCreateOrUpdate.push({
         customerId,
-        orderNumber: order.orderNumber, // Używamy camelCase
-        customerReference: order.customerReference, // Używamy camelCase
+        orderNumber: order.order_number,
+        customerReference: order.customer_reference,
         status: order.status,
-        senderDetails: order.senderDetails,
-        recipientDetails: order.recipientDetails,
+        senderDetails: order.sender_details,
+        recipientDetails: order.recipient_details,
         cargoDetails: updatedCargoDetails,
-        loadingDateTime: order.loadingDateTime,
-        unloadingDateTime: order.unloadingDateTime,
-        serviceLevel: order.serviceLevel,
-        selectedSurcharges: order.selectedSurcharges || [],
+        loadingDateTime: order.loading_date_time,
+        unloadingDateTime: order.unloading_date_time,
+        serviceLevel: order.service_level,
+        selectedSurcharges: order.selected_surcharges || [],
         calculatedPrice: priceResult ? priceResult.calculatedPrice : null,
         finalPrice: priceResult ? priceResult.finalPrice : null,
         unloadingStartTime: order.unloading_start_time || null,

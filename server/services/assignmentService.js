@@ -1,6 +1,6 @@
 // Plik server/services/assignmentService.js
 const { Assignment, Order, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { Op } = require('sequelize'); // Op jest już importowany z sequelize
 
 const createAssignment = async ({ orderId, runId, notes }) => {
   // Używamy transakcji, aby zapewnić, że obie operacje (wstawienie i aktualizacja) powiodą się lub żadna.

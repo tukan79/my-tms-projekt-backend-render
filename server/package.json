@@ -1,7 +1,7 @@
 {
   "name": "tms-server",
   "version": "1.0.0",
-  "description": "Backend for the TMS application with secure transportation management",
+  "description": "Backend for the TMS application with secure transportation management.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

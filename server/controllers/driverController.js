@@ -17,7 +17,7 @@ exports.getAllDrivers = async (req, res, next) => {
 exports.exportDrivers = async (req, res, next) => {
   try {
     const drivers = await driverService.findDriversByCompany();
-    const csv = Papa.unparse(drivers);
+    const csv = Papa.unparse(drivers.map(d => d.get({ plain: true }))); // Używamy get({ plain: true })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `drivers_${timestamp}.csv`;
@@ -52,7 +52,16 @@ exports.createDriver = async (req, res, next) => {
     if (!req.body.first_name || !req.body.last_name) {
       return res.status(400).json({ error: 'Imię i nazwisko kierowcy są wymagane.' });
     }
-    const newDriver = await driverService.createDriver(req.body);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const newDriver = await driverService.createDriver({
+      firstName: req.body.first_name,
+      lastName: req.body.last_name,
+      phoneNumber: req.body.phone_number,
+      cpcNumber: req.body.cpc_number,
+      loginCode: req.body.login_code,
+      licenseNumber: req.body.license_number,
+      isActive: req.body.is_active,
+    });
     res.status(201).json(newDriver);
   } catch (error) {
     next(error);
@@ -62,14 +71,22 @@ exports.createDriver = async (req, res, next) => {
 exports.updateDriver = async (req, res, next) => {
   try {
     const { driverId } = req.params;
-    const driverData = req.body;
 
     // Prosta walidacja
-    if (!driverData.first_name || !driverData.last_name || !driverData.license_number) {
+    if (!req.body.first_name || !req.body.last_name || !req.body.license_number) {
       return res.status(400).json({ error: 'Imię, nazwisko i numer prawa jazdy są wymagane.' });
     }
 
-    const updatedDriver = await driverService.updateDriver(driverId, driverData);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const updatedDriver = await driverService.updateDriver(driverId, {
+      firstName: req.body.first_name,
+      lastName: req.body.last_name,
+      phoneNumber: req.body.phone_number,
+      cpcNumber: req.body.cpc_number,
+      loginCode: req.body.login_code,
+      licenseNumber: req.body.license_number,
+      isActive: req.body.is_active,
+    });
 
     if (!updatedDriver) {
       return res.status(404).json({ error: 'Nie znaleziono kierowcy lub nie masz uprawnień do jego edycji.' });

@@ -14,4 +14,3 @@ router.put('/:truckId', truckController.updateTruck);
 router.delete('/:truckId', truckController.deleteTruck);
 
 module.exports = router;
-//new commit

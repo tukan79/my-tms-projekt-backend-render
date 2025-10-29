@@ -18,7 +18,12 @@ exports.createZone = async (req, res, next) => {
     if (!req.body.zone_name) {
       return res.status(400).json({ error: 'Zone name is required.' });
     }
-    const newZone = await zoneService.createZone(req.body);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const newZone = await zoneService.createZone({
+      zoneName: req.body.zone_name,
+      postcodePatterns: req.body.postcode_patterns,
+      isHomeZone: req.body.is_home_zone,
+    });
     res.status(201).json(newZone);
   } catch (error) {
     next(error);
@@ -27,7 +32,12 @@ exports.createZone = async (req, res, next) => {
 
 exports.updateZone = async (req, res, next) => {
   try {
-    const updatedZone = await zoneService.updateZone(req.params.zoneId, req.body);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const updatedZone = await zoneService.updateZone(req.params.zoneId, {
+      zoneName: req.body.zone_name,
+      postcodePatterns: req.body.postcode_patterns,
+      isHomeZone: req.body.is_home_zone,
+    });
     if (!updatedZone) {
       return res.status(404).json({ error: 'Zone not found.' });
     }
@@ -53,7 +63,7 @@ exports.exportZones = async (req, res, next) => {
   try {
     console.log('[Export] 1/6: Starting export process...');
     const zones = await zoneService.findAllZones();
-    console.log(`[Export] 2/6: Successfully fetched ${zones.length} zones from the database.`);
+    console.log(`[Export] 2/6: Successfully fetched ${zones.length} zones from the database.`); // zones są już czystymi obiektami z serwisu
 
     // Konwertujemy tablicę wzorców na string oddzielony średnikami
     const dataToExport = zones.map(zone => ({

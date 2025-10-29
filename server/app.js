@@ -105,7 +105,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.get('/health', async (req, res) => {
   try {
     // Proste zapytanie do bazy danych, aby sprawdzić, czy połączenie działa.
-    await sequelize.query('SELECT 1'); // Używamy sequelize do wykonania zapytania
+    await sequelize.authenticate(); // Używamy sequelize.authenticate() do sprawdzenia połączenia
     res.status(200).json({
       status: 'OK',
       database: 'connected',

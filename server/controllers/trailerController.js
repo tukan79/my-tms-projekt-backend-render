@@ -16,7 +16,7 @@ exports.getAllTrailers = async (req, res, next) => {
 exports.exportTrailers = async (req, res, next) => {
   try {
     const trailers = await trailerService.findTrailersByCompany();
-    const csv = Papa.unparse(trailers);
+    const csv = Papa.unparse(trailers.map(t => t.get({ plain: true }))); // Używamy get({ plain: true })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `trailers_${timestamp}.csv`;
@@ -39,13 +39,24 @@ exports.exportTrailers = async (req, res, next) => {
 exports.createTrailer = async (req, res, next) => {
   try {
     const trailerData = req.body;
-
-    // Prosta walidacja
     if (!trailerData.registration_plate || !trailerData.brand) {
       return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
     }
     
-    const newTrailer = await trailerService.createTrailer(trailerData);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const newTrailer = await trailerService.createTrailer({
+      registrationPlate: trailerData.registration_plate,
+      brand: trailerData.brand,
+      description: trailerData.description,
+      category: trailerData.category,
+      maxPayloadKg: trailerData.max_payload_kg,
+      maxSpaces: trailerData.max_spaces,
+      lengthM: trailerData.length_m,
+      widthM: trailerData.width_m,
+      heightM: trailerData.height_m,
+      weightKg: trailerData.weight_kg,
+      status: trailerData.status,
+    });
     res.status(201).json(newTrailer);
   } catch (error) {
     next(error);
@@ -70,13 +81,25 @@ exports.importTrailers = async (req, res, next) => {
 exports.updateTrailer = async (req, res, next) => {
   try {
     const { trailerId } = req.params;
-    const trailerData = req.body;
 
-    if (!trailerData.registration_plate || !trailerData.brand) {
+    if (!req.body.registration_plate || !req.body.brand) {
       return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
     }
     
-    const updatedTrailer = await trailerService.updateTrailer(trailerId, trailerData);
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const updatedTrailer = await trailerService.updateTrailer(trailerId, {
+      registrationPlate: req.body.registration_plate,
+      brand: req.body.brand,
+      description: req.body.description,
+      category: req.body.category,
+      maxPayloadKg: req.body.max_payload_kg,
+      maxSpaces: req.body.max_spaces,
+      lengthM: req.body.length_m,
+      widthM: req.body.width_m,
+      heightM: req.body.height_m,
+      weightKg: req.body.weight_kg,
+      status: req.body.status,
+    });
 
     if (!updatedTrailer) {
       return res.status(404).json({ error: 'Nie znaleziono naczepy lub nie masz uprawnień do jej edycji.' });

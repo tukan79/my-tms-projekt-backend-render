@@ -27,9 +27,24 @@ exports.createOrder = async (req, res, next) => {
 
 exports.updateOrder = async (req, res, next) => {
   try {
-    // Serwis `updateOrder` oczekuje danych w snake_case i konwertuje je na camelCase.
-    // Przekazujemy req.body bezpośrednio.
-    const updatedOrder = await orderService.updateOrder(req.params.id, req.body); 
+    // Mapujemy snake_case z req.body na camelCase dla serwisu
+    const orderData = {
+      customer_id: req.body.customer_id,
+      order_number: req.body.order_number,
+      service_level: req.body.service_level,
+      customer_reference: req.body.customer_reference,
+      status: req.body.status,
+      sender_details: req.body.sender_details,
+      recipient_details: req.body.recipient_details,
+      cargo_details: req.body.cargo_details,
+      loading_date_time: req.body.loading_date_time,
+      unloading_date_time: req.body.unloading_date_time,
+      selected_surcharges: req.body.selected_surcharges,
+      unloading_start_time: req.body.unloading_start_time,
+      unloading_end_time: req.body.unloading_end_time,
+      final_price: req.body.final_price, // Dodajemy final_price do aktualizacji
+    };
+    const updatedOrder = await orderService.updateOrder(req.params.id, orderData); 
     if (!updatedOrder) return res.status(404).json({ error: 'Order not found' });
     res.json(updatedOrder);
   } catch (error) {

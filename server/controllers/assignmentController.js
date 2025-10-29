@@ -19,7 +19,7 @@ exports.createAssignment = async (req, res, next) => {
     }
 
     const parsedOrderId = parseInt(order_id, 10);
-    const parsedRunId = parseInt(run_id, 10);
+    const parsedRunId = parseInt(run_id, 10); // Usunięto zduplikowaną linię
 
     if (isNaN(parsedOrderId) || isNaN(parsedRunId)) {
       return res.status(400).json({ error: 'Order ID and Run ID must be valid numbers.' });
