@@ -29,7 +29,7 @@ const invoiceRoutes = require('./routes/invoiceRoutes.js');
 
 // Importujemy middleware do obsługi błędów
 const errorMiddleware = require('./middleware/errorMiddleware.js');
-const db = require('./db/index.js');
+const { sequelize } = require('./models'); // Importujemy instancję Sequelize
 
 const app = express();
 
@@ -105,7 +105,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.get('/health', async (req, res) => {
   try {
     // Proste zapytanie do bazy danych, aby sprawdzić, czy połączenie działa.
-    await db.query('SELECT 1');
+    await sequelize.query('SELECT 1'); // Używamy sequelize do wykonania zapytania
     res.status(200).json({
       status: 'OK',
       database: 'connected',

@@ -1,117 +1,117 @@
-const db = require('../db/index.js');
+const { User, sequelize } = require('../models');
 const bcrypt = require('bcryptjs');
 
 const createUser = async (userData) => {
-  const { email, password, role, first_name, last_name } = userData;
-  const password_hash = await bcrypt.hash(password, 10);
-  const sql = `
-    INSERT INTO users (email, password_hash, role, first_name, last_name)
-    VALUES ($1, $2, $3, $4, $5) RETURNING id, email, role, first_name, last_name;
-  `;
-  const { rows } = await db.query(sql, [email, password_hash, role, first_name, last_name]);
-  return rows[0];
+  const { email, password, role, first_name: firstName, last_name: lastName } = userData;
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const newUser = await User.create({
+    email,
+    passwordHash,
+    role,
+    firstName,
+    lastName,
+  });
+
+  // Zwracamy obiekt bez hasła
+  const { passwordHash: _, ...userWithoutPassword } = newUser.get({ plain: true });
+  return userWithoutPassword;
 };
 
 const findAllUsers = async () => {
-  const { rows } = await db.query('SELECT id, email, first_name, last_name, role, created_at FROM users WHERE is_deleted = FALSE ORDER BY last_name, first_name');
-  return rows;
+  // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
+  return User.findAll({
+    attributes: { exclude: ['passwordHash'] }, // Nie zwracamy hasha hasła
+    order: [['lastName', 'ASC'], ['firstName', 'ASC']],
+  });
 };
 
 const findUserByEmailWithPassword = async (email) => {
-  const { rows } = await db.query('SELECT * FROM users WHERE email = $1 AND is_deleted = FALSE', [email]);
-  return rows[0] || null;
+  // Ta funkcja jako jedyna powinna zwracać hash hasła do weryfikacji
+  return User.findOne({
+    where: { email },
+  });
 };
 
 const findUserById = async (userId) => {
-  const { rows } = await db.query(
-    'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1 AND is_deleted = FALSE',
-    [userId]
-  );
-  return rows[0] || null;
+  return User.findByPk(userId, {
+    attributes: { exclude: ['passwordHash'] },
+  });
 };
 
 const updateUser = async (userId, userData) => {
-  const { first_name, last_name, role, password } = userData;
+  const { first_name: firstName, last_name: lastName, role, password } = userData;
 
   const fieldsToUpdate = {};
-  if (first_name !== undefined) fieldsToUpdate.first_name = first_name;
-  if (last_name !== undefined) fieldsToUpdate.last_name = last_name;
+  if (firstName !== undefined) fieldsToUpdate.firstName = firstName;
+  if (lastName !== undefined) fieldsToUpdate.lastName = lastName;
   if (role !== undefined) fieldsToUpdate.role = role;
 
   // Jeśli hasło jest podane, haszujemy je przed aktualizacją.
   if (password) {
-    // W przyszłości można dodać walidację siły hasła, podobnie jak przy rejestracji.
-    fieldsToUpdate.password_hash = await bcrypt.hash(password, 10);
+    fieldsToUpdate.passwordHash = await bcrypt.hash(password, 10);
   }
 
   const fieldKeys = Object.keys(fieldsToUpdate);
   if (fieldKeys.length === 0) {
-    // Jeśli nie ma danych do aktualizacji, zwracamy aktualne dane użytkownika.
     return findUserById(userId);
   }
 
-  // Dynamiczne budowanie klauzuli SET
-  const setClause = fieldKeys.map((key, index) => `${key} = $${index + 1}`).join(', ');
-  const values = Object.values(fieldsToUpdate);
-  values.push(userId); // Dodajemy userId na końcu dla klauzuli WHERE
+  const [updatedRowsCount, updatedUsers] = await User.update(
+    fieldsToUpdate,
+    {
+      where: { id: userId },
+      returning: true,
+    }
+  );
 
-  const sql = `
-    UPDATE users SET ${setClause}, updated_at = NOW()
-    WHERE id = $${values.length} AND is_deleted = FALSE
-    RETURNING id, email, role, first_name, last_name;
-  `;
-  const { rows } = await db.query(sql, values);
-  return rows[0] || null;
+  if (updatedRowsCount > 0) {
+    const { passwordHash: _, ...userWithoutPassword } = updatedUsers[0].get({ plain: true });
+    return userWithoutPassword;
+  }
+  return null;
 };
 
 const deleteUser = async (userId) => {
-  const result = await db.query('UPDATE users SET is_deleted = TRUE WHERE id = $1', [userId]);
-  return result.rowCount;
+  // `destroy` z `paranoid: true` w modelu wykona soft delete
+  return User.destroy({ where: { id: userId } });
 };
 
 const importUsers = async (usersData) => {
-  return db.withTransaction(async (client) => {
-    const importedUsers = [];
+  return sequelize.transaction(async (t) => {
     const errors = [];
-    const sql = `
-      INSERT INTO users (email, first_name, last_name, password_hash, role)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (email) DO UPDATE SET
-        first_name = EXCLUDED.first_name,
-        last_name = EXCLUDED.last_name,
-        role = EXCLUDED.role,
-        updated_at = NOW()
-      RETURNING id;
-    `;
+    const usersToCreateOrUpdate = [];
 
     for (const [index, user] of usersData.entries()) {
       if (!user.email || !user.password || !user.role || !user.first_name || !user.last_name) {
         errors.push({ line: index + 2, message: 'Missing required fields.' });
         continue;
       }
-
       if (user.password.length < 6) {
         errors.push({ line: index + 2, message: `Password for ${user.email} is too short (min 6 chars).` });
         continue;
       }
 
-      const password_hash = await bcrypt.hash(user.password, 10);
-
-      try {
-        const result = await client.query(sql, [
-          user.email,
-          user.first_name,
-          user.last_name,
-          password_hash,
-          user.role,
-        ]);
-        if (result.rows.length > 0) {
-          importedUsers.push(result.rows[0]);
-        }
-      } catch (e) {
-        errors.push({ line: index + 2, message: `Database error for ${user.email}: ${e.message}` });
-      }
+      const passwordHash = await bcrypt.hash(user.password, 10);
+      usersToCreateOrUpdate.push({
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        passwordHash: passwordHash,
+        role: user.role,
+      });
     }
+
+    if (usersToCreateOrUpdate.length === 0) {
+      return { count: 0, importedIds: [], errors };
+    }
+
+    // Używamy `bulkCreate` z opcją `updateOnDuplicate`, aby obsłużyć konflikty
+    const importedUsers = await User.bulkCreate(usersToCreateOrUpdate, {
+      transaction: t,
+      updateOnDuplicate: ['firstName', 'lastName', 'role'], // Nie aktualizujemy hasła przy konflikcie
+    });
+
     return { count: importedUsers.length, importedIds: importedUsers.map(u => u.id), errors };
   });
 };

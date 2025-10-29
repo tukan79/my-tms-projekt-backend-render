@@ -1,50 +1,71 @@
 // server/services/truckService.js
-const db = require('../db/index.js');
+const { Truck, sequelize } = require('../models');
 
 const createTruck = async (truckData) => {
   const {
-    registration_plate, brand, model, vin, production_year,
-    type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active
+    registration_plate: registrationPlate, brand, model, vin, production_year: productionYear,
+    type_of_truck: typeOfTruck, total_weight: totalWeight, pallet_capacity: palletCapacity, max_payload_kg: maxPayloadKg, is_active: isActive
   } = truckData;
 
-  const sql = `
-    INSERT INTO trucks (
-      registration_plate, brand, model, vin, production_year, type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *
-  `;
   try {
-    const { rows } = await db.query(sql, [
-      registration_plate, brand, model, vin, production_year, type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active
-    ]);
-    return rows[0];
+    const newTruck = await Truck.create({
+      registrationPlate,
+      brand,
+      model,
+      vin,
+      productionYear,
+      typeOfTruck,
+      totalWeight,
+      palletCapacity,
+      maxPayloadKg,
+      isActive,
+    });
+    return newTruck;
   } catch (error) {
     throw error;
   }
 };
 
 const findTrucksByCompany = async () => {
-  const { rows } = await db.query('SELECT * FROM trucks WHERE is_deleted = FALSE ORDER BY brand, model');
-  return rows;
+  // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
+  return Truck.findAll({
+    order: [['brand', 'ASC'], ['model', 'ASC']],
+  });
 };
 
 const updateTruck = async (truckId, truckData) => {
   const {
-    registration_plate, brand, model, vin, production_year,
-    type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active
+    registration_plate: registrationPlate, brand, model, vin, production_year: productionYear,
+    type_of_truck: typeOfTruck, total_weight: totalWeight, pallet_capacity: palletCapacity, max_payload_kg: maxPayloadKg, is_active: isActive
   } = truckData;
-  const sql = `
-    UPDATE trucks SET
-      registration_plate = $1, brand = $2, model = $3, vin = $4, production_year = $5,
-      type_of_truck = $6, total_weight = $7, pallet_capacity = $8, max_payload_kg = $9, is_active = $10
-    WHERE id = $11 RETURNING *
-  `;
-  const { rows } = await db.query(sql, [registration_plate, brand, model, vin, production_year, type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active, truckId]);
-  return rows.length > 0 ? rows[0] : null;
+
+  const dataToUpdate = {
+    registrationPlate,
+    brand,
+    model,
+    vin,
+    productionYear,
+    typeOfTruck,
+    totalWeight,
+    palletCapacity,
+    maxPayloadKg,
+    isActive,
+  };
+
+  const [updatedRowsCount, updatedTrucks] = await Truck.update(
+    dataToUpdate,
+    {
+      where: { id: truckId },
+      returning: true,
+    }
+  );
+
+  return updatedRowsCount > 0 ? updatedTrucks[0] : null;
 };
 
 const deleteTruck = async (truckId) => {
-  const result = await db.query('UPDATE trucks SET is_deleted = TRUE WHERE id = $1', [truckId]);
-  return result.rowCount;
+  // `destroy` z `paranoid: true` w modelu wykona soft delete
+  return Truck.destroy({ where: { id: truckId } });
 };
 
 const toInt = (value) => {
@@ -52,49 +73,43 @@ const toInt = (value) => {
   return isNaN(num) ? null : num;
 };
 
+const toBoolean = (value) => {
+  if (value === false) return false;
+  if (typeof value === 'string') {
+    return ['true', 'yes', '1', 't'].includes(value.toLowerCase());
+  }
+  return Boolean(value);
+};
+
 const importTrucks = async (trucksData) => {
-  return db.withTransaction(async (client) => {
-    const importedTrucks = [];
-    const sql = `
-      INSERT INTO trucks (
-        registration_plate, brand, model, vin, production_year, 
-        type_of_truck, total_weight, pallet_capacity, max_payload_kg, is_active
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (registration_plate) DO UPDATE SET
-        brand = EXCLUDED.brand,
-        model = EXCLUDED.model,
-        vin = EXCLUDED.vin,
-        production_year = EXCLUDED.production_year,
-        type_of_truck = EXCLUDED.type_of_truck,
-        total_weight = EXCLUDED.total_weight,
-        pallet_capacity = EXCLUDED.pallet_capacity,
-        max_payload_kg = EXCLUDED.max_payload_kg,
-        is_active = EXCLUDED.is_active,
-        updated_at = NOW()
-      RETURNING id;
-    `;
+  return sequelize.transaction(async (t) => {
+    const trucksToCreateOrUpdate = [];
 
     for (const truck of trucksData) {
       if (!truck.registration_plate) continue; // Pomiń wiersze bez numeru rejestracyjnego
 
-      const result = await client.query(sql, [
-        truck.registration_plate,
-        truck.brand,
-        truck.model || '',
-        truck.vin || null,
-        toInt(truck.production_year),
-        truck.type_of_truck?.toLowerCase() === 'rigid' ? 'rigid' : 'tractor',
-        toInt(truck.total_weight),
-        toInt(truck.pallet_capacity),
-        toInt(truck.max_payload_kg),
-        truck.is_active !== false // Domyślnie true, chyba że jawnie ustawiono na false
-      ]);
-
-      if (result.rows.length > 0) {
-        importedTrucks.push(result.rows[0]);
-      }
+      trucksToCreateOrUpdate.push({
+        registrationPlate: truck.registration_plate,
+        brand: truck.brand,
+        model: truck.model || '',
+        vin: truck.vin || null,
+        productionYear: toInt(truck.production_year),
+        typeOfTruck: truck.type_of_truck?.toLowerCase() === 'rigid' ? 'rigid' : 'tractor',
+        totalWeight: toInt(truck.total_weight),
+        palletCapacity: toInt(truck.pallet_capacity),
+        maxPayloadKg: toInt(truck.max_payload_kg),
+        isActive: toBoolean(truck.is_active),
+      });
     }
+
+    if (trucksToCreateOrUpdate.length === 0) {
+      return { importedCount: 0, importedIds: [] };
+    }
+
+    const importedTrucks = await Truck.bulkCreate(trucksToCreateOrUpdate, {
+      transaction: t,
+      updateOnDuplicate: ['brand', 'model', 'vin', 'productionYear', 'typeOfTruck', 'totalWeight', 'palletCapacity', 'maxPayloadKg', 'isActive'],
+    });
 
     return { importedCount: importedTrucks.length, importedIds: importedTrucks.map(t => t.id) };
   });
@@ -105,6 +120,5 @@ module.exports = {
   findTrucksByCompany,
   updateTruck,
   deleteTruck,
-  toInt,
   importTrucks,
 };

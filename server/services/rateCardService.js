@@ -1,4 +1,5 @@
-const db = require('../db/index.js');
+const { RateCard, RateEntry, Customer, PostcodeZone, CustomerRateCardAssignment, sequelize } = require('../models');
+const { Op } = require('sequelize');
 
 // Helper function for consistent logging within the service
 const logService = (level, context, message, data = null) => {
@@ -23,23 +24,19 @@ const findRateCardByCustomerId = async (customerId) => {
   const context = 'findRateCardByCustomerId';
   try {
     logService('INFO', context, 'Finding rate card for customer', { customerId });
-    const assignmentSql = `SELECT rate_card_id FROM customer_rate_card_assignments WHERE customer_id = $1 LIMIT 1`;
-    const assignmentResult = await db.query(assignmentSql, [customerId]);
+    const assignment = await CustomerRateCardAssignment.findOne({
+      where: { customerId },
+      include: [{ model: RateCard, as: 'rateCard' }]
+    });
 
-    if (assignmentResult.rows.length === 0) {
+    if (!assignment || !assignment.rateCard) {
       logService('INFO', context, 'No rate card assignment found for customer', { customerId });
       return null;
     }
 
-    const rateCardId = assignmentResult.rows[0].rate_card_id;
-    logService('DEBUG', context, 'Found rate card assignment', { customerId, rateCardId });
-
-    const rateCardSql = `SELECT * FROM rate_cards WHERE id = $1`;
-    const rateCardResult = await db.query(rateCardSql, [rateCardId]);
-
-    const result = rateCardResult.rows[0] || null;
-    logService('INFO', context, 'Rate card retrieval completed', { customerId, found: !!result });
-    return result;
+    const rateCard = assignment.rateCard;
+    logService('INFO', context, 'Rate card retrieval completed', { customerId, found: !!rateCard });
+    return rateCard;
   } catch (error) {
     logService('ERROR', context, 'Error finding rate card by customer ID', { customerId, error: error.message });
     throw error;
@@ -54,10 +51,11 @@ const findAllRateCards = async () => {
   const context = 'findAllRateCards';
   try {
     logService('INFO', context, 'Fetching all rate cards');
-    const sql = `SELECT * FROM rate_cards ORDER BY name`;
-    const { rows } = await db.query(sql);
-    logService('INFO', context, 'Successfully fetched rate cards', { count: rows.length });
-    return rows;
+    const rateCards = await RateCard.findAll({
+      order: [['name', 'ASC']]
+    });
+    logService('INFO', context, 'Successfully fetched rate cards', { count: rateCards.length });
+    return rateCards;
   } catch (error) {
     logService('ERROR', context, 'Error finding all rate cards', { error: error.message });
     throw error;
@@ -71,15 +69,10 @@ const createRateCard = async ({ name }) => {
       throw new Error('Rate card name is required');
     }
 
-    logService('INFO', context, 'Creating new rate card', { name });
-    const sql = `
-      INSERT INTO rate_cards (name)
-      VALUES ($1) 
-      RETURNING *
-    `;
-    const { rows } = await db.query(sql, [name.trim()]);
-    logService('INFO', context, 'Successfully created rate card', { id: rows[0].id, name: rows[0].name });
-    return rows[0];
+    logService('INFO', context, 'Creating new rate card', { name: name.trim() });
+    const newRateCard = await RateCard.create({ name: name.trim() });
+    logService('INFO', context, 'Successfully created rate card', { id: newRateCard.id, name: newRateCard.name });
+    return newRateCard;
   } catch (error) {
     logService('ERROR', context, 'Error creating rate card', { error: error.message, name });
     throw error;
@@ -87,44 +80,27 @@ const createRateCard = async ({ name }) => {
 };
 
 const updateRateCard = async (id, { name, price }) => {
+  // Uwaga: pole 'price' nie istnieje w tabeli 'rate_cards', więc zostało zignorowane.
   const context = 'updateRateCard';
   try {
-    logService('INFO', context, 'Updating rate card', { id, updates: { name, price } });
+    logService('INFO', context, 'Updating rate card', { id, updates: { name } });
     
-    const updates = [];
-    const params = [];
-    let paramCount = 1;
-
-    if (name !== undefined) {
-      updates.push(`name = $${paramCount++}`);
-      params.push(name);
-    }
-    if (price !== undefined) {
-      updates.push(`price = $${paramCount++}`);
-      params.push(price);
-    }
-
-    if (updates.length === 0) {
+    if (name === undefined) {
       throw new Error('No fields to update');
     }
 
-    updates.push(`updated_at = NOW()`);
-    params.push(id);
+    const [updatedRowsCount, updatedRateCards] = await RateCard.update(
+      { name },
+      {
+        where: { id },
+        returning: true,
+      }
+    );
 
-    const sql = `
-      UPDATE rate_cards 
-      SET ${updates.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `;
-
-    const { rows } = await db.query(sql, params);
-    if (rows.length === 0) {
-      throw new Error('Rate card not found');
-    }
+    if (updatedRowsCount === 0) return null;
     
-    logService('INFO', context, 'Successfully updated rate card', { id: rows[0].id });
-    return rows[0];
+    logService('INFO', context, 'Successfully updated rate card', { id: updatedRateCards[0].id });
+    return updatedRateCards[0];
   } catch (error) {
     logService('ERROR', context, 'Error updating rate card', { id, error: error.message });
     throw error;
@@ -171,7 +147,7 @@ const importRateEntries = async (rateCardId, entries) => {
     return { count: 0, skipped: 0, errors: [] };
   }
 
-  return db.withTransaction(async (client) => {
+  return sequelize.transaction(async (t) => {
     try {
       logService('INFO', context, 'Starting transaction for rate entries import', { 
         rateCardId, 
@@ -180,7 +156,10 @@ const importRateEntries = async (rateCardId, entries) => {
 
       // Pobierz wszystkie strefy
       logService('DEBUG', context, 'Fetching zones from database');
-      const { rows: zones } = await client.query('SELECT id, zone_name FROM postcode_zones');
+      const zones = await PostcodeZone.findAll({
+        attributes: ['id', 'zoneName'],
+        transaction: t
+      });
       logService('DEBUG', context, `Retrieved ${zones.length} zones from database`);
 
       // Tworzymy mapowanie nazw stref na ID - POPRAWIONE MAPOWANIE
@@ -195,36 +174,10 @@ const importRateEntries = async (rateCardId, entries) => {
         sampleMappings: Array.from(zoneMap.entries()).slice(0, 10).map(([key, value]) => `${key} -> ${value}`)
       });
 
-      const sql = `
-        INSERT INTO rate_entries (
-          rate_card_id, rate_type, zone_id, service_level,
-          price_micro, price_quarter, price_half, price_half_plus,
-          price_full_1, price_full_2, price_full_3, price_full_4, price_full_5,
-          price_full_6, price_full_7, price_full_8, price_full_9, price_full_10
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
-        )
-        ON CONFLICT (rate_card_id, rate_type, zone_id, service_level) DO UPDATE SET
-          price_micro = EXCLUDED.price_micro,
-          price_quarter = EXCLUDED.price_quarter,
-          price_half = EXCLUDED.price_half,
-          price_half_plus = EXCLUDED.price_half_plus,
-          price_full_1 = EXCLUDED.price_full_1,
-          price_full_2 = EXCLUDED.price_full_2,
-          price_full_3 = EXCLUDED.price_full_3,
-          price_full_4 = EXCLUDED.price_full_4,
-          price_full_5 = EXCLUDED.price_full_5,
-          price_full_6 = EXCLUDED.price_full_6,
-          price_full_7 = EXCLUDED.price_full_7,
-          price_full_8 = EXCLUDED.price_full_8,
-          price_full_9 = EXCLUDED.price_full_9,
-          price_full_10 = EXCLUDED.price_full_10;
-      `;
-
-      let processedCount = 0;
       let skippedCount = 0;
       const errors = [];
       const processedKeys = new Set(); // Zestaw do śledzenia unikalnych kluczy
+      const entriesToCreate = [];
 
       for (const [index, entry] of entries.entries()) {
         try {
@@ -263,40 +216,47 @@ const importRateEntries = async (rateCardId, entries) => {
             continue;
           }
 
-          const params = [
+          entriesToCreate.push({
             rateCardId,
             rateType,
             zoneId,
             serviceLevel,
-            parsePrice(findValueByKeys(entry, ['Price Micro', 'price_micro'])),
-            parsePrice(findValueByKeys(entry, ['Price Quarter', 'price_quarter'])),
-            parsePrice(findValueByKeys(entry, ['Price Half', 'price_half'])),
-            parsePrice(findValueByKeys(entry, ['Price Half Plus', 'Price Plus Half', 'price_half_plus'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 1', 'price_full_1'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 2', 'price_full_2'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 3', 'price_full_3'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 4', 'price_full_4'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 5', 'price_full_5'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 6', 'price_full_6'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 7', 'price_full_7'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 8', 'price_full_8'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 9', 'price_full_9'])),
-            parsePrice(findValueByKeys(entry, ['Price Full 10', 'price_full_10'])),
-          ];
+            priceMicro: parsePrice(findValueByKeys(entry, ['Price Micro', 'price_micro'])),
+            priceQuarter: parsePrice(findValueByKeys(entry, ['Price Quarter', 'price_quarter'])),
+            priceHalf: parsePrice(findValueByKeys(entry, ['Price Half', 'price_half'])),
+            priceHalfPlus: parsePrice(findValueByKeys(entry, ['Price Half Plus', 'Price Plus Half', 'price_half_plus'])),
+            priceFull1: parsePrice(findValueByKeys(entry, ['Price Full 1', 'price_full_1'])),
+            priceFull2: parsePrice(findValueByKeys(entry, ['Price Full 2', 'price_full_2'])),
+            priceFull3: parsePrice(findValueByKeys(entry, ['Price Full 3', 'price_full_3'])),
+            priceFull4: parsePrice(findValueByKeys(entry, ['Price Full 4', 'price_full_4'])),
+            priceFull5: parsePrice(findValueByKeys(entry, ['Price Full 5', 'price_full_5'])),
+            priceFull6: parsePrice(findValueByKeys(entry, ['Price Full 6', 'price_full_6'])),
+            priceFull7: parsePrice(findValueByKeys(entry, ['Price Full 7', 'price_full_7'])),
+            priceFull8: parsePrice(findValueByKeys(entry, ['Price Full 8', 'price_full_8'])),
+            priceFull9: parsePrice(findValueByKeys(entry, ['Price Full 9', 'price_full_9'])),
+            priceFull10: parsePrice(findValueByKeys(entry, ['Price Full 10', 'price_full_10'])),
+          });
 
-          await client.query(sql, params);
           processedKeys.add(uniqueKey); // Dodaj klucz do przetworzonych
-          processedCount++;
-          
-          if (processedCount % 50 === 0) {
-            logService('INFO', context, `Processed ${processedCount} entries`, { rateCardId });
-          }
         } catch (entryError) {
           const errorMsg = `Error processing entry ${index} for zone ${entry['Zone Name']}: ${entryError.message}`;
           errors.push(errorMsg);
           skippedCount++;
           logService('ERROR', context, errorMsg);
         }
+      }
+
+      let processedCount = 0;
+      if (entriesToCreate.length > 0) {
+        const createdEntries = await RateEntry.bulkCreate(entriesToCreate, {
+          transaction: t,
+          updateOnDuplicate: [
+            'priceMicro', 'priceQuarter', 'priceHalf', 'priceHalfPlus',
+            'priceFull1', 'priceFull2', 'priceFull3', 'priceFull4', 'priceFull5',
+            'priceFull6', 'priceFull7', 'priceFull8', 'priceFull9', 'priceFull10'
+          ],
+        });
+        processedCount = createdEntries.length;
       }
 
       // Logowanie podsumowania
@@ -334,16 +294,14 @@ const findEntriesByRateCardId = async (rateCardId) => {
   const context = 'findEntriesByRateCardId';
   try {
     logService('INFO', context, 'Finding rate entries for rate card', { rateCardId });
-    const sql = `
-      SELECT re.*, pz.zone_name 
-      FROM rate_entries re
-      LEFT JOIN postcode_zones pz ON re.zone_id = pz.id
-      WHERE re.rate_card_id = $1 
-      ORDER BY re.zone_id, re.service_level
-    `;
-    const { rows } = await db.query(sql, [rateCardId]);
-    logService('INFO', context, 'Found rate entries', { rateCardId, count: rows.length });
-    return rows;
+    const entries = await RateEntry.findAll({
+      where: { rateCardId },
+      include: [{ model: PostcodeZone, as: 'zone', attributes: ['zoneName'] }],
+      order: [['zoneId', 'ASC'], ['serviceLevel', 'ASC']],
+      raw: true, // Zwraca czyste obiekty JS
+    });
+    logService('INFO', context, 'Found rate entries', { rateCardId, count: entries.length });
+    return entries;
   } catch (error) {
     logService('ERROR', context, 'Error finding rate entries', { rateCardId, error: error.message });
     throw error;
@@ -354,16 +312,17 @@ const findCustomersByRateCardId = async (rateCardId) => {
   const context = 'findCustomersByRateCardId';
   try {
     logService('INFO', context, 'Finding customers for rate card', { rateCardId });
-    const sql = `
-      SELECT c.id, c.name, c.customer_code 
-      FROM customers c
-      JOIN customer_rate_card_assignments crca ON c.id = crca.customer_id
-      WHERE crca.rate_card_id = $1
-      ORDER BY c.name;
-    `;
-    const { rows } = await db.query(sql, [rateCardId]);
-    logService('INFO', context, 'Found customers for rate card', { rateCardId, count: rows.length });
-    return rows;
+    const customers = await Customer.findAll({
+      include: [{
+        model: CustomerRateCardAssignment,
+        as: 'rateCardAssignment',
+        where: { rateCardId },
+        required: true, // Działa jak INNER JOIN
+      }],
+      order: [['name', 'ASC']],
+    });
+    logService('INFO', context, 'Found customers for rate card', { rateCardId, count: customers.length });
+    return customers;
   } catch (error) {
     logService('ERROR', context, 'Error finding customers by rate card', { rateCardId, error: error.message });
     throw error;
@@ -374,16 +333,14 @@ const assignCustomerToRateCard = async (rateCardId, customerId) => {
   const context = 'assignCustomerToRateCard';
   try {
     logService('INFO', context, 'Assigning customer to rate card', { rateCardId, customerId });
-    const sql = `
-      INSERT INTO customer_rate_card_assignments (customer_id, rate_card_id)
-      VALUES ($1, $2)
-      ON CONFLICT (customer_id) DO UPDATE
-      SET rate_card_id = EXCLUDED.rate_card_id
-      RETURNING *;
-    `;
-    const { rows } = await db.query(sql, [customerId, rateCardId]);
+    const [assignment, created] = await CustomerRateCardAssignment.upsert({
+      customerId,
+      rateCardId,
+    });
     logService('INFO', context, 'Successfully assigned customer to rate card', { rateCardId, customerId });
-    return rows[0];
+    // `upsert` w Sequelize nie zwraca obiektu w taki sam sposób jak `RETURNING *`
+    // Zwracamy dane, które próbowaliśmy wstawić/zaktualizować
+    return { customerId, rateCardId };
   } catch (error) {
     logService('ERROR', context, 'Error assigning customer to rate card', { rateCardId, customerId, error: error.message });
     throw error;
@@ -394,14 +351,13 @@ const unassignCustomerFromRateCard = async (rateCardId, customerId) => {
   const context = 'unassignCustomerFromRateCard';
   try {
     logService('INFO', context, 'Unassigning customer from rate card', { rateCardId, customerId });
-    const sql = `DELETE FROM customer_rate_card_assignments WHERE customer_id = $1 AND rate_card_id = $2`;
-    const result = await db.query(sql, [customerId, rateCardId]);
+    const deletedCount = await CustomerRateCardAssignment.destroy({ where: { customerId, rateCardId } });
     logService('INFO', context, 'Successfully unassigned customer from rate card', { 
       rateCardId, 
       customerId, 
-      rowCount: result.rowCount 
+      rowCount: deletedCount 
     });
-    return result.rowCount;
+    return deletedCount;
   } catch (error) {
     logService('ERROR', context, 'Error unassigning customer from rate card', { rateCardId, customerId, error: error.message });
     throw error;
@@ -416,22 +372,18 @@ const assignCustomersToRateCardBulk = async (rateCardId, customerIds) => {
     throw new Error('An array of customer IDs is required.');
   }
 
-  return db.withTransaction(async (client) => {
-    const sql = `
-      INSERT INTO customer_rate_card_assignments (customer_id, rate_card_id)
-      VALUES ($1, $2)
-      ON CONFLICT (customer_id) DO UPDATE
-      SET rate_card_id = EXCLUDED.rate_card_id;
-    `;
+  return sequelize.transaction(async (t) => {
+    const assignments = customerIds.map(customerId => ({ customerId, rateCardId }));
+    
+    // `bulkCreate` z `updateOnDuplicate` działa jak `upsert` dla wielu rekordów
+    const results = await CustomerRateCardAssignment.bulkCreate(assignments, {
+      transaction: t,
+      updateOnDuplicate: ['rateCardId'],
+    });
 
-    const results = [];
-    for (const customerId of customerIds) {
-      const result = await client.query(sql, [customerId, rateCardId]);
-      results.push(result);
-    }
-
-    logService('INFO', context, `Successfully assigned ${results.length} customers.`, { rateCardId });
-    return { count: results.length };
+    const count = results.length;
+    logService('INFO', context, `Successfully assigned ${count} customers.`, { rateCardId });
+    return { count };
   });
 };
 
@@ -440,10 +392,12 @@ const getZoneMappingInfo = async () => {
   const context = 'getZoneMappingInfo';
   try {
     logService('INFO', context, 'Fetching zone mapping info');
-    const sql = `SELECT id, zone_name FROM postcode_zones ORDER BY id`;
-    const { rows } = await db.query(sql);
-    logService('INFO', context, 'Retrieved zone mapping info', { count: rows.length });
-    return rows;
+    const zones = await PostcodeZone.findAll({
+      attributes: ['id', 'zoneName'],
+      order: [['id', 'ASC']]
+    });
+    logService('INFO', context, 'Retrieved zone mapping info', { count: zones.length });
+    return zones;
   } catch (error) {
     logService('ERROR', context, 'Error getting zone mapping info', { error: error.message });
     throw error;

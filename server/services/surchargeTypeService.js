@@ -1,35 +1,49 @@
 // Plik: server/services/surchargeTypeService.js
-const db = require('../db/index.js');
+const { SurchargeType } = require('../models');
 
 const findAll = async () => {
-  const { rows } = await db.query('SELECT * FROM surcharge_types ORDER BY name');
-  return rows;
+  return SurchargeType.findAll({
+    order: [['name', 'ASC']],
+  });
 };
 
 const create = async (surchargeData) => {
-  const { code, name, description, calculation_method, amount, is_automatic, requires_time, start_time, end_time } = surchargeData;
-  const sql = `
-    INSERT INTO surcharge_types (code, name, description, calculation_method, amount, is_automatic, requires_time, start_time, end_time)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
-  `;
-  const { rows } = await db.query(sql, [code, name, description, calculation_method, amount, is_automatic || false, requires_time || false, start_time || null, end_time || null]);
-  return rows[0];
+  const { code, name, description, calculation_method: calculationMethod, amount, is_automatic: isAutomatic, requires_time: requiresTime, start_time: startTime, end_time: endTime } = surchargeData;
+  return SurchargeType.create({
+    code,
+    name,
+    description,
+    calculationMethod,
+    amount,
+    isAutomatic: isAutomatic || false,
+    requiresTime: requiresTime || false,
+    startTime: startTime || null,
+    endTime: endTime || null,
+  });
 };
 
 const update = async (id, surchargeData) => {
-  const { code, name, description, calculation_method, amount, is_automatic, requires_time, start_time, end_time } = surchargeData;
-  const sql = `
-    UPDATE surcharge_types
-    SET code = $1, name = $2, description = $3, calculation_method = $4, amount = $5, is_automatic = $6, requires_time = $7, start_time = $8, end_time = $9, updated_at = NOW()
-    WHERE id = $10 RETURNING *;
-  `;
-  const { rows } = await db.query(sql, [code, name, description, calculation_method, amount, is_automatic || false, requires_time || false, start_time || null, end_time || null, id]);
-  return rows[0] || null;
+  const { code, name, description, calculation_method: calculationMethod, amount, is_automatic: isAutomatic, requires_time: requiresTime, start_time: startTime, end_time: endTime } = surchargeData;
+  
+  const [updatedRowsCount, updatedSurcharges] = await SurchargeType.update(
+    {
+      code, name, description, calculationMethod, amount, isAutomatic, requiresTime, startTime, endTime
+    },
+    {
+      where: { id },
+      returning: true,
+    }
+  );
+
+  return updatedRowsCount > 0 ? updatedSurcharges[0] : null;
 };
 
 const deleteById = async (id) => {
-  const result = await db.query('DELETE FROM surcharge_types WHERE id = $1', [id]);
-  return result.rowCount;
+  // Model SurchargeType nie ma `paranoid: true`, więc to będzie twarde usunięcie.
+  // Jeśli zlecenie używa tego typu dopłaty, baza danych (ON DELETE RESTRICT) zwróci błąd.
+  return SurchargeType.destroy({
+    where: { id },
+  });
 };
 
 module.exports = {

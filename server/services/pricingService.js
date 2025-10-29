@@ -1,5 +1,6 @@
 // Plik server/services/pricingService.js
-const db = require('../db/index.js');
+const { PostcodeZone, CustomerRateCardAssignment, RateEntry, SurchargeType, Sequelize } = require('../models');
+const { Op } = Sequelize;
 const logger = require('../config/logger.js');
 
 // Stałe dla typów stawek i poziomów usług
@@ -22,13 +23,11 @@ const findZoneForPostcode = async (postcode) => {
   if (!postcode || typeof postcode !== 'string') return null;
   
   try {
-    const { rows } = await db.query(
-      `SELECT * FROM postcode_zones WHERE EXISTS (
-        SELECT 1 FROM unnest(postcode_patterns) AS pattern
-        WHERE $1 ILIKE pattern
-      ) LIMIT 1`,
-      [postcode]
-    );
+    // Używamy Sequelize.literal, aby skorzystać z funkcji PostgreSQL `ILIKE ANY`
+    const zone = await PostcodeZone.findOne({
+      where: Sequelize.literal(`'${postcode.replace(/'/g, "''")}' ILIKE ANY(postcode_patterns)`)
+    });
+    const rows = zone ? [zone.get({ plain: true })] : [];
     logger.debug(`Zone search for postcode ${postcode}: found ${rows.length} zones`, { context: 'findZoneForPostcode' });
     return rows[0] || null;
   } catch (error) {
@@ -40,56 +39,59 @@ const findZoneForPostcode = async (postcode) => {
 /**
  * Finds the rate for a single leg of a journey (collection or delivery).
  * @param {number} rateCardId - The ID of the rate card.
- * @param {string} rateType - 'collection' or 'delivery'.
+ * @param {string[]} rateTypes - An array of 'collection' or 'delivery'.
  * @param {number} zoneId - The ID of the zone for which the rate is being calculated.
  * @param {object} order - The order object containing service level and pallet details.
  * @returns {Promise<Array>} An array of calculated prices for each leg with breakdown.
  */
 const findRateForLeg = async (rateCardId, rateTypes, zoneIds, order) => {
-  const context = 'findRateForLeg';
-  logger.debug('Starting rate calculation for leg', { context, rateCardId, rateTypes, zoneIds, serviceLevel: order.service_level });
+  const context = 'findRateForLeg'; // Keep context for logging
+  logger.debug('Starting rate calculation for leg', { context, rateCardId, rateTypes, zoneIds, serviceLevel: order.serviceLevel });
   
   try {
-    const query = `
-      SELECT * FROM rate_entries
-      WHERE rate_card_id = $1 AND rate_type = ANY($2::varchar[]) AND zone_id = ANY($3::int[]) AND service_level = $4
-    `;
-    
-    const { rows } = await db.query(query, [rateCardId, rateTypes, zoneIds, order.service_level]);
+    const rateEntries = await RateEntry.findAll({
+      where: {
+        rateCardId: rateCardId,
+        rateType: { [Op.in]: rateTypes },
+        zoneId: { [Op.in]: zoneIds },
+        serviceLevel: order.serviceLevel
+      }
+    });
+    const rows = rateEntries.map(entry => entry.get({ plain: true }));
     logger.debug(`Found ${rows.length} rate entries in database`, { context });
 
-    if (rows.length === 0) {
-      logger.warn('No rate entries found for the given criteria', { context, rateCardId, rateTypes, zoneIds, serviceLevel: order.service_level });
+    if (rows.length === 0) { // Keep context for logging
+      logger.warn('No rate entries found for the given criteria', { context, rateCardId, rateTypes, zoneIds, serviceLevel: order.serviceLevel });
       return [];
     }
 
     const results = rows.map(rate => {
       const priceBreakdown = {};
-      console.log(`Rate entry found:`, {
+      logger.debug(`Rate entry found:`, {
         id: rate.id,
-        rate_type: rate.rate_type,
-        zone_id: rate.zone_id,
-        price_full_1: rate.price_full_1,
-        price_half_plus: rate.price_half_plus,
-        price_half: rate.price_half,
-        price_quarter: rate.price_quarter,
-        price_micro: rate.price_micro
+        rate_type: rate.rateType,
+        zone_id: rate.zoneId,
+        price_full_1: rate.priceFull1,
+        price_half_plus: rate.priceHalfPlus,
+        price_half: rate.priceHalf,
+        price_quarter: rate.priceQuarter,
+        price_micro: rate.priceMicro
       });
 
       // Poprawka: Logika musi obsługiwać tablicę palet, a nie obiekt.
-      const pallets = Array.isArray(order.cargo_details?.pallets) ? order.cargo_details.pallets : [];
+      const pallets = Array.isArray(order.cargoDetails?.pallets) ? order.cargoDetails.pallets : [];
       logger.debug('Pallets from order', { context, pallets });
 
       const columnMapping = {
-        'micro': 'price_micro',
-        'quarter': 'price_quarter',
-        'half': 'price_half',
-        'half_plus': 'price_half_plus',
+        'micro': 'priceMicro',
+        'quarter': 'priceQuarter',
+        'half': 'priceHalf',
+        'half_plus': 'priceHalfPlus',
       };
 
       pallets.forEach(pallet => {
         const { type, quantity, spaces } = pallet;
-        const priceColumn = type === 'full' ? `price_full_${quantity}` : columnMapping[type];
+        const priceColumn = type === 'full' ? `priceFull${quantity}` : columnMapping[type];
         const priceValue = parseFloat(rate[priceColumn]) || 0;
 
         if (priceValue > 0) {
@@ -98,14 +100,14 @@ const findRateForLeg = async (rateCardId, rateTypes, zoneIds, order) => {
           priceBreakdown[type] = (priceBreakdown[type] || 0) + cost; // Poprawka: Sumujemy koszty dla tego samego typu palety
           logger.debug(`Calculated cost for pallet type '${type}'`, { context, quantity, spaces, cost: cost.toFixed(2) });
         } else {
-          const errorMessage = `Price for ${quantity}x '${type}' pallet(s) is missing or zero in the rate card for zone ID ${rate.zone_id} and service level ${order.service_level}.`;
+          const errorMessage = `Price for ${quantity}x '${type}' pallet(s) is missing or zero in the rate card for zone ID ${rate.zoneId} and service level ${order.serviceLevel}.`; // Keep context for logging
           logger.error(errorMessage, { context });
           throw new Error(errorMessage);
         }
       });
 
       const total = Object.values(priceBreakdown).reduce((sum, price) => sum + price, 0);
-      logger.debug(`Total for leg`, { context, rate_type: rate.rate_type, zone_id: rate.zone_id, total: total.toFixed(2) });
+      logger.debug(`Total for leg`, { context, rate_type: rate.rateType, zone_id: rate.zoneId, total: total.toFixed(2) });
       
       return { total, breakdown: priceBreakdown, rate_type: rate.rate_type };
     });
@@ -117,7 +119,7 @@ const findRateForLeg = async (rateCardId, rateTypes, zoneIds, order) => {
       rateCardId, 
       rateTypes, 
       zoneIds, 
-      serviceLevel: order.service_level, 
+      serviceLevel: order.serviceLevel, 
       error: error.message 
     });
     throw error; // Rzucamy błąd dalej, aby transakcja mogła zostać wycofana
@@ -133,10 +135,10 @@ const calculateOrderPrice = async (order) => {
   const context = 'calculateOrderPrice';
   logger.info(`Starting price calculation for order ${order.id || 'new'}`, {
     context,
-    customer_id: order.customer_id,
-    service_level: order.service_level,
-    sender_postcode: order.sender_details?.postCode,
-    recipient_postcode: order.recipient_details?.postCode,
+    customerId: order.customer_id,
+    serviceLevel: order.service_level,
+    senderPostcode: order.sender_details?.postCode,
+    recipientPostcode: order.recipient_details?.postCode,
   });
 
   if (!order.customer_id || !order.sender_details?.postCode || !order.recipient_details?.postCode) {
@@ -162,17 +164,16 @@ const calculateOrderPrice = async (order) => {
 
   // 2. Find the rate card assigned to the client
   logger.debug(`Finding rate card for customer ${order.customer_id}`, { context });
-  const { rows: rateCards } = await db.query(
-    'SELECT rate_card_id as id FROM customer_rate_card_assignments WHERE customer_id = $1 LIMIT 1',
-    [order.customer_id]
-  );
+  const rateCardAssignment = await CustomerRateCardAssignment.findOne({
+    where: { customerId: order.customer_id }
+  });
   
-  if (rateCards.length === 0) {
+  if (!rateCardAssignment) {
     logger.warn(`No rate card assigned to client ${order.customer_id}`, { context });
     return null;
   }
   
-  const rateCardId = rateCards[0].id;
+  const rateCardId = rateCardAssignment.rateCardId;
   logger.debug(`Using rate card ID: ${rateCardId}`, { context });
 
   // 3. Calculate price based on the scenario
@@ -238,28 +239,29 @@ const calculateOrderPrice = async (order) => {
   logger.debug(`Calculated price (before surcharges): £${calculatedPrice.toFixed(2)}`, { context, breakdown: priceBreakdown });
 
   // 4. Add surcharges
-  const { rows: surchargeRules } = await db.query('SELECT * FROM surcharge_types');
-  const selectedSurcharges = order.selected_surcharges || [];
+  const surchargeRules = (await SurchargeType.findAll()).map(rule => rule.get({ plain: true }));
 
+  const selectedSurcharges = order.selectedSurcharges || [];
+  
   // Dodajemy automatyczne dopłaty, jeśli warunki są spełnione
   surchargeRules.forEach(rule => {
-    if (rule.is_automatic) {
-      if (rule.code === 'SAT' && order.service_level === SERVICE_LEVELS.SATURDAY && !selectedSurcharges.includes('SAT')) {
+    if (rule.isAutomatic) {
+      if (rule.code === 'SAT' && order.serviceLevel === SERVICE_LEVELS.SATURDAY && !selectedSurcharges.includes('SAT')) {
         selectedSurcharges.push('SAT');
       }
     }
   });
-
+  
   if (selectedSurcharges.length > 0) {
     logger.debug(`Applying surcharges for codes: ${selectedSurcharges.join(', ')}`, { context });
     selectedSurcharges.forEach(code => {
       const rule = surchargeRules.find(r => r.code === code);
       if (rule) {
         let surchargeAmount = 0;
-        if (rule.calculation_method === 'per_order') {
+        if (rule.calculationMethod === 'per_order') {
           surchargeAmount = parseFloat(rule.amount);
-        } else if (rule.calculation_method === 'per_pallet_space') {
-          const totalSpaces = order.cargo_details?.total_spaces || 0;
+        } else if (rule.calculationMethod === 'per_pallet_space') {
+          const totalSpaces = order.cargoDetails?.totalSpaces || 0;
           surchargeAmount = totalSpaces * parseFloat(rule.amount);
         }
 

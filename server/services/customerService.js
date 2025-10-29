@@ -1,94 +1,59 @@
 // Plik server/services/customerService.js
-const db = require('../db/index.js');
+const { Customer, sequelize } = require('../models');
 
 const createCustomer = async (customerData) => {
   const { 
-    name, customer_code, address_line1, address_line2, address_line3, address_line4, 
-    postcode, phone_number, country_code, category, currency, vat_number, payment_terms, status,
-    pod_on_portal, invoice_on_portal, handheld_status_on_portal, eta_status_on_portal, general_status_on_portal
+    name, customer_code: customerCode, address_line1: addressLine1, address_line2: addressLine2, address_line3: addressLine3, address_line4: addressLine4, 
+    postcode, phone_number: phoneNumber, country_code: countryCode, category, currency, vat_number: vatNumber, payment_terms: paymentTerms, status,
+    pod_on_portal: podOnPortal, invoice_on_portal: invoiceOnPortal, handheld_status_on_portal: handheldStatusOnPortal, eta_status_on_portal: etaStatusOnPortal, general_status_on_portal: generalStatusOnPortal
   } = customerData;
-  const sql = `
-    INSERT INTO customers (
-      name, customer_code, address_line1, address_line2, address_line3, address_line4, postcode, phone_number, 
-      country_code, category, currency, vat_number, payment_terms, status, pod_on_portal, invoice_on_portal, 
-      handheld_status_on_portal, eta_status_on_portal, general_status_on_portal
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING *
-  `;
-  const { rows } = await db.query(sql, [
-    name, customer_code, address_line1, address_line2, address_line3, address_line4, postcode, phone_number, 
-    country_code, category, currency, vat_number, payment_terms, status, pod_on_portal, invoice_on_portal, 
-    handheld_status_on_portal, eta_status_on_portal, general_status_on_portal
-  ]);
-  return rows[0];
+
+  return Customer.create({
+    name, customerCode, addressLine1, addressLine2, addressLine3, addressLine4, postcode, phoneNumber, 
+    countryCode, category, currency, vatNumber, paymentTerms, status, podOnPortal, invoiceOnPortal, 
+    handheldStatusOnPortal, etaStatusOnPortal, generalStatusOnPortal
+  });
 };
 
 const findAllCustomers = async () => {
-  const { rows } = await db.query('SELECT * FROM customers WHERE is_deleted = FALSE ORDER BY name');
-  return rows;
+  // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
+  return Customer.findAll({
+    order: [['name', 'ASC']],
+  });
 };
 
 const updateCustomer = async (customerId, customerData) => {
   const { 
-    name, customer_code, address_line1, address_line2, address_line3, address_line4, 
-    postcode, phone_number, country_code, category, currency, vat_number, payment_terms, status,
-    pod_on_portal, invoice_on_portal, handheld_status_on_portal, eta_status_on_portal, general_status_on_portal
+    name, customer_code: customerCode, address_line1: addressLine1, address_line2: addressLine2, address_line3: addressLine3, address_line4: addressLine4, 
+    postcode, phone_number: phoneNumber, country_code: countryCode, category, currency, vat_number: vatNumber, payment_terms: paymentTerms, status,
+    pod_on_portal: podOnPortal, invoice_on_portal: invoiceOnPortal, handheld_status_on_portal: handheldStatusOnPortal, eta_status_on_portal: etaStatusOnPortal, general_status_on_portal: generalStatusOnPortal
   } = customerData;
-  const sql = `
-    UPDATE customers
-    SET name = $1, customer_code = $2, address_line1 = $3, address_line2 = $4, address_line3 = $5, address_line4 = $6, 
-        postcode = $7, phone_number = $8, country_code = $9, category = $10, currency = $11, vat_number = $12, 
-        payment_terms = $13, status = $14, pod_on_portal = $15, invoice_on_portal = $16, handheld_status_on_portal = $17, 
-        eta_status_on_portal = $18, general_status_on_portal = $19, updated_at = NOW()
-    WHERE id = $20 RETURNING *
-  `;
-  const { rows } = await db.query(sql, [
-    name, customer_code, address_line1, address_line2, address_line3, address_line4, postcode, phone_number, 
-    country_code, category, currency, vat_number, payment_terms, status, pod_on_portal, invoice_on_portal, 
-    handheld_status_on_portal, eta_status_on_portal, general_status_on_portal, customerId
-  ]);
-  return rows.length > 0 ? rows[0] : null;
+
+  const dataToUpdate = {
+    name, customerCode, addressLine1, addressLine2, addressLine3, addressLine4, postcode, phoneNumber, 
+    countryCode, category, currency, vatNumber, paymentTerms, status, podOnPortal, invoiceOnPortal, 
+    handheldStatusOnPortal, etaStatusOnPortal, generalStatusOnPortal
+  };
+
+  const [updatedRowsCount, updatedCustomers] = await Customer.update(
+    dataToUpdate,
+    {
+      where: { id: customerId },
+      returning: true,
+    }
+  );
+
+  return updatedRowsCount > 0 ? updatedCustomers[0] : null;
 };
 
 const deleteCustomer = async (customerId) => {
-  const sql = 'UPDATE customers SET is_deleted = TRUE WHERE id = $1';
-  const result = await db.query(sql, [customerId]);
-  return result.rowCount;
+  // `destroy` z `paranoid: true` w modelu wykona soft delete
+  return Customer.destroy({ where: { id: customerId } });
 };
 
 const importCustomers = async (customersData) => {
-  return db.withTransaction(async (client) => {
-    const importedCustomers = [];
+  return sequelize.transaction(async (t) => {
     const errors = [];
-    const sql = `
-      INSERT INTO customers (
-        customer_code, name, address_line1, address_line2, address_line3, address_line4, 
-        postcode, phone_number, country_code, category, currency, status, vat_number, payment_terms,
-        pod_on_portal, invoice_on_portal, handheld_status_on_portal, eta_status_on_portal, general_status_on_portal
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-      ON CONFLICT (customer_code) DO UPDATE SET
-        name = EXCLUDED.name,
-        address_line1 = EXCLUDED.address_line1,
-        address_line2 = EXCLUDED.address_line2,
-        address_line3 = EXCLUDED.address_line3,
-        address_line4 = EXCLUDED.address_line4,
-        postcode = EXCLUDED.postcode,
-        phone_number = EXCLUDED.phone_number,
-        country_code = EXCLUDED.country_code,
-        category = EXCLUDED.category,
-        currency = EXCLUDED.currency,
-        status = EXCLUDED.status,
-        vat_number = EXCLUDED.vat_number,
-        payment_terms = EXCLUDED.payment_terms,
-        pod_on_portal = EXCLUDED.pod_on_portal,
-        invoice_on_portal = EXCLUDED.invoice_on_portal,
-        handheld_status_on_portal = EXCLUDED.handheld_status_on_portal,
-        eta_status_on_portal = EXCLUDED.eta_status_on_portal,
-        general_status_on_portal = EXCLUDED.general_status_on_portal,
-        updated_at = NOW()
-      RETURNING id, name;
-    `;
 
     const toBoolean = (value) => {
       if (typeof value === 'string') {
@@ -97,6 +62,7 @@ const importCustomers = async (customersData) => {
       return Boolean(value);
     };
 
+    const customersToCreateOrUpdate = [];
     for (const [index, customerData] of customersData.entries()) {
       // Walidacja podstawowych danych
       if (!customerData.customer_code || !customerData.name) {
@@ -104,31 +70,42 @@ const importCustomers = async (customersData) => {
         continue; // Pomiń ten rekord
       }
 
-      const result = await client.query(sql, [
-        customerData.customer_code,
-        customerData.name,
-        customerData.address_line1 || null,
-        customerData.address_line2 || null,
-        customerData.address_line3 || null,
-        customerData.address_line4 || null,
-        customerData.postcode || null,
-        customerData.phone_number || null,
-        customerData.country_code || 'GB',
-        customerData.category || null,
-        customerData.currency || 'GBP',
-        customerData.status || 'active',
-        customerData.vat_number || null,
-        customerData.payment_terms ? parseInt(customerData.payment_terms, 10) : 14,
-        toBoolean(customerData.pod_on_portal || false),
-        toBoolean(customerData.invoice_on_portal || false),
-        toBoolean(customerData.handheld_status_on_portal || false),
-        toBoolean(customerData.eta_status_on_portal || false),
-        toBoolean(customerData.general_status_on_portal || false)
-      ]);
-      if (result.rows.length > 0) {
-        importedCustomers.push(result.rows[0]);
-      }
+      customersToCreateOrUpdate.push({
+        customerCode: customerData.customer_code,
+        name: customerData.name,
+        addressLine1: customerData.address_line1 || null,
+        addressLine2: customerData.address_line2 || null,
+        addressLine3: customerData.address_line3 || null,
+        addressLine4: customerData.address_line4 || null,
+        postcode: customerData.postcode || null,
+        phoneNumber: customerData.phone_number || null,
+        countryCode: customerData.country_code || 'GB',
+        category: customerData.category || null,
+        currency: customerData.currency || 'GBP',
+        status: customerData.status || 'active',
+        vatNumber: customerData.vat_number || null,
+        paymentTerms: customerData.payment_terms ? parseInt(customerData.payment_terms, 10) : 14,
+        podOnPortal: toBoolean(customerData.pod_on_portal || false),
+        invoiceOnPortal: toBoolean(customerData.invoice_on_portal || false),
+        handheldStatusOnPortal: toBoolean(customerData.handheld_status_on_portal || false),
+        etaStatusOnPortal: toBoolean(customerData.eta_status_on_portal || false),
+        generalStatusOnPortal: toBoolean(customerData.general_status_on_portal || false),
+      });
     }
+
+    if (customersToCreateOrUpdate.length === 0) {
+      return { count: 0, importedIds: [], errors };
+    }
+
+    const importedCustomers = await Customer.bulkCreate(customersToCreateOrUpdate, {
+      transaction: t,
+      updateOnDuplicate: [
+        'name', 'addressLine1', 'addressLine2', 'addressLine3', 'addressLine4', 'postcode', 'phoneNumber',
+        'countryCode', 'category', 'currency', 'status', 'vatNumber', 'paymentTerms', 'podOnPortal',
+        'invoiceOnPortal', 'handheldStatusOnPortal', 'etaStatusOnPortal', 'generalStatusOnPortal'
+      ],
+    });
+
     return { count: importedCustomers.length, importedIds: importedCustomers.map(c => c.id), errors };
   });
 };

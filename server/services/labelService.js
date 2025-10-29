@@ -1,7 +1,7 @@
 // Plik: server/services/labelService.js
 const PDFDocument = require('pdfkit');
 const bwipjs = require('bwip-js');
-const db = require('../db/index.js');
+const { Order } = require('../models');
 
 /**
  * Generuje PDF z etykietami paletowymi dla danego zlecenia.
@@ -9,14 +9,13 @@ const db = require('../db/index.js');
  * @returns {Promise<Buffer>} Bufor z danymi PDF.
  */
 const generatePalletLabelsPDF = async (orderId) => {
-  const { rows } = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
-  if (rows.length === 0) {
+  const order = await Order.findByPk(orderId);
+  if (!order) {
     throw new Error('Order not found');
   }
-  const order = rows[0];
 
-  const totalSpaces = order.cargo_details?.total_spaces || 1;
-  const consignmentNumber = order.order_number || `ORD-${order.id}`;
+  const totalSpaces = order.cargoDetails?.total_spaces || 1;
+  const consignmentNumber = order.orderNumber || `ORD-${order.id}`;
 
   return new Promise(async (resolve, reject) => {
     try {
@@ -51,9 +50,9 @@ const generatePalletLabelsPDF = async (orderId) => {
         // --- Sekcja Odbiorcy (TO) ---
         doc.fontSize(10).font('Helvetica-Bold').text('TO:', 30, 30);
         doc.font('Helvetica').fontSize(12)
-          .text(order.recipient_details?.name || 'N/A', 35, 45, { width: doc.page.width - 70 })
-          .text(order.recipient_details?.address1 || '', { width: doc.page.width - 70 })
-          .text(`${order.recipient_details?.postCode || ''} ${order.recipient_details?.city || ''}`, { width: doc.page.width - 70 });
+          .text(order.recipientDetails?.name || 'N/A', 35, 45, { width: doc.page.width - 70 })
+          .text(order.recipientDetails?.address1 || '', { width: doc.page.width - 70 })
+          .text(`${order.recipientDetails?.postCode || ''} ${order.recipientDetails?.city || ''}`, { width: doc.page.width - 70 });
 
         // Linia oddzielająca
         doc.moveTo(30, doc.y + 10).lineTo(doc.page.width - 30, doc.y + 10).stroke();
@@ -61,7 +60,7 @@ const generatePalletLabelsPDF = async (orderId) => {
         // --- Sekcja Nadawcy (FROM) ---
         doc.fontSize(8).font('Helvetica-Bold').text('FROM:', 30, doc.y + 15);
         doc.font('Helvetica').fontSize(9)
-          .text(order.sender_details?.name || 'N/A', 35, doc.y + 2, { width: doc.page.width - 70 });
+          .text(order.senderDetails?.name || 'N/A', 35, doc.y + 2, { width: doc.page.width - 70 });
 
         // --- Kod kreskowy i numer zlecenia ---
         const barcodeY = doc.page.height / 2 + 30;
@@ -78,7 +77,7 @@ const generatePalletLabelsPDF = async (orderId) => {
         const footerY = doc.page.height - 40;
         doc.fontSize(9).font('Helvetica')
           .text(`Consignment: ${consignmentNumber}`, 30, footerY, { align: 'left' })
-          .text(`Date: ${new Date(order.created_at).toLocaleDateString()}`, 30, footerY, { align: 'right' });
+          .text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`, 30, footerY, { align: 'right' });
       }
 
       doc.end();

@@ -1,86 +1,109 @@
 // Plik server/services/runService.js
-const db = require('../db/index.js');
+const { Run, Driver, Truck, Trailer, sequelize } = require('../models');
+const { Op } = require('sequelize');
 
 const createRun = async (runData) => {
-  const { run_date, type, truck_id, trailer_id, driver_id } = runData;
-  // Poprawka: Jeśli trailer_id jest pustym stringiem, zamień go na null.
-  const sql = `
-    INSERT INTO runs (run_date, type, truck_id, trailer_id, driver_id)
-    VALUES ($1, $2, $3, $4, $5) RETURNING *
-  `;
-  const { rows } = await db.query(sql, [run_date, type, truck_id, trailer_id || null, driver_id]);
-  return rows[0];
+  // Mapujemy snake_case na camelCase dla modelu Sequelize
+  const { run_date: runDate, type, truck_id: truckId, trailer_id: trailerId, driver_id: driverId } = runData;
+
+  const newRun = await Run.create({
+    runDate,
+    type,
+    truckId,
+    trailerId: trailerId || null, // Zapewniamy, że pusty string staje się null
+    driverId,
+  });
+
+  return newRun;
 };
 
 const findAllRuns = async (filters = {}) => {
-  // Poprawka: Formatujemy datę bezpośrednio w zapytaniu SQL do stringa 'YYYY-MM-DD'.
-  // To eliminuje wszystkie problemy ze strefami czasowymi po stronie klienta.
-  let sql = `
-    SELECT 
-      id, 
-      TO_CHAR(run_date, 'YYYY-MM-DD') as run_date, 
-      type, truck_id, trailer_id, driver_id, status, created_at, updated_at 
-    FROM runs WHERE is_deleted = FALSE
-  `;
-  const params = [];
+  const whereClause = {};
 
   if (filters.date) {
-    params.push(filters.date);
-    sql += ` AND run_date = $${params.length}`;
+    whereClause.runDate = filters.date;
   }
 
-  // Domyślne sortowanie, jeśli żadne inne nie jest zdefiniowane
-  sql += ' ORDER BY run_date DESC, created_at DESC';
+  // Używamy `include`, aby za jednym zapytaniem pobrać powiązane dane
+  const runs = await Run.findAll({
+    where: whereClause,
+    include: [
+      {
+        model: Driver,
+        as: 'driver',
+        attributes: ['id', 'firstName', 'lastName'],
+      },
+      {
+        model: Truck,
+        as: 'truck',
+        attributes: ['id', 'registrationPlate'],
+      },
+      {
+        model: Trailer,
+        as: 'trailer',
+        attributes: ['id', 'registrationPlate'],
+      },
+    ],
+    order: [
+      ['runDate', 'DESC'],
+      ['createdAt', 'DESC'],
+    ],
+  });
 
-  const { rows } = await db.query(sql, params);
-  return rows;
+  return runs;
 };
 
 const deleteRun = async (id) => {
   // Używamy "soft delete" dla spójności i bezpieczeństwa danych.
-  // We use "soft delete" for data consistency and safety.
   console.log(`[runService] Próba usunięcia (soft delete) przejazdu o ID: ${id}`);
-  const sql = 'UPDATE runs SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1';
-  const result = await db.query(sql, [id]);
-  // Zwracamy liczbę zmienionych wierszy. Powinno być 1, jeśli operacja się powiodła.
-  // Return the number of affected rows. Should be 1 on success.
-  console.log(`[runService] Liczba zmienionych wierszy w tabeli 'runs': ${result.rowCount}`);
-  return result.rowCount;
+
+  // Metoda `destroy` z opcją `paranoid: true` w modelu automatycznie wykona soft delete.
+  const deletedRowsCount = await Run.destroy({
+    where: { id: id },
+  });
+
+  console.log(`[runService] Liczba zmienionych wierszy w tabeli 'runs': ${deletedRowsCount}`);
+  return deletedRowsCount;
 };
 
 const updateRunStatus = async (runId, status) => {
   const allowedStatuses = ['planned', 'in_progress', 'completed'];
   if (!allowedStatuses.includes(status)) {
-    // Rzucamy błąd, jeśli status jest nieprawidłowy
     throw new Error(`Invalid status: "${status}". Allowed statuses are: ${allowedStatuses.join(', ')}.`);
   }
 
-  const sql = `
-    UPDATE runs
-    SET status = $1, updated_at = NOW()
-    WHERE id = $2 AND is_deleted = FALSE
-    RETURNING *;
-  `;
-  const { rows } = await db.query(sql, [status, runId]);
-  return rows[0] || null; // Zwraca zaktualizowany przejazd lub null, jeśli nie znaleziono
+  const [updatedRowsCount, updatedRuns] = await Run.update(
+    { status: status },
+    {
+      where: { id: runId },
+      returning: true, // Zwraca zaktualizowane rekordy
+    }
+  );
+
+  return updatedRowsCount > 0 ? updatedRuns[0] : null;
 };
 
 const updateRun = async (runId, runData) => {
-  const { run_date, type, truck_id, trailer_id, driver_id } = runData;
-  const sql = `
-    UPDATE runs
-    SET 
-      run_date = $1, 
-      type = $2, 
-      truck_id = $3, 
-      trailer_id = $4, 
-      driver_id = $5, 
-      updated_at = NOW()
-    WHERE id = $6 AND is_deleted = FALSE
-    RETURNING *;
-  `;
-  const { rows } = await db.query(sql, [run_date, type, truck_id, trailer_id || null, driver_id, runId]);
-  return rows[0] || null;
+  // Mapujemy snake_case na camelCase
+  const { run_date: runDate, type, truck_id: truckId, trailer_id: trailerId, driver_id: driverId } = runData;
+
+  const dataToUpdate = {
+    runDate,
+    type,
+    truckId,
+    trailerId: trailerId || null,
+    driverId,
+  };
+
+  const [updatedRowsCount, updatedRuns] = await Run.update(
+    dataToUpdate,
+    {
+      where: { id: runId },
+      returning: true,
+    }
+  );
+
+  return updatedRowsCount > 0 ? updatedRuns[0] : null;
 };
 
 module.exports = {

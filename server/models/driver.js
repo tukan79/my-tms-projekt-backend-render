@@ -1,0 +1,49 @@
+// Plik server/models/driver.js
+'use strict';
+const { Model } = require('sequelize');
+
+module.exports = (sequelize, DataTypes) => {
+  class Driver extends Model {
+    static associate(models) {
+      // Kierowca może być przypisany do wielu przejazdów (Runs)
+      Driver.hasMany(models.Run, {
+        foreignKey: 'driverId',
+        as: 'runs',
+      });
+    }
+  }
+  Driver.init({
+    firstName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    lastName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    phoneNumber: DataTypes.STRING,
+    licenseNumber: DataTypes.STRING,
+    cpcNumber: DataTypes.STRING,
+    loginCode: {
+      type: DataTypes.STRING,
+      unique: true,
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+  }, {
+    sequelize,
+    modelName: 'Driver',
+    tableName: 'drivers',
+    timestamps: true,
+    paranoid: true,
+    deletedAt: 'isDeleted',
+    underscored: true,
+  });
+  return Driver;
+};
