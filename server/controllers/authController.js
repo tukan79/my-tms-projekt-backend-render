@@ -24,14 +24,14 @@ const register = async (req, res, next) => {
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { email, password, firstName, lastName } = req.body;
+    const { email, password, first_name, last_name } = req.body;
 
     // Poprawka: Jawnie ustawiamy rolę na 'user' podczas rejestracji.
     const newUser = await userService.createUser({
       email: email,
       password,
-      firstName: firstName, // Zmieniono na camelCase
-      lastName: lastName,   // Zmieniono na camelCase
+      firstName: first_name,
+      lastName: last_name,
       role: 'user',
     });
 
@@ -96,8 +96,8 @@ const login = async (req, res, next) => {
       id: user.id, 
       email: user.email, 
       role: user.role,
-      firstName: user.firstName, // Zmieniono na camelCase
-      lastName: user.lastName    // Zmieniono na camelCase
+      firstName: user.firstName,
+      lastName: user.lastName
     };
     // Zwróć accessToken i dane użytkownika
     return res.json({ accessToken, user: userPayload });
@@ -120,8 +120,8 @@ const verifyToken = async (req, res, next) => {
       id: user.id,
       email: user.email,
       role: user.role,
-      firstName: user.firstName, // Zmieniono na camelCase
-      lastName: user.lastName,   // Zmieniono na camelCase
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
     return res.json({ user: userPayload });
   } catch (error) {

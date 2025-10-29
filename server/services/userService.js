@@ -2,7 +2,7 @@ const { User, sequelize } = require('../models');
 const bcrypt = require('bcryptjs');
 
 const createUser = async (userData) => {
-  const { email, password, role, first_name: firstName, last_name: lastName } = userData;
+  const { email, password, role, firstName, lastName } = userData;
   const passwordHash = await bcrypt.hash(password, 10);
 
   const newUser = await User.create({
@@ -40,7 +40,7 @@ const findUserById = async (userId) => {
 };
 
 const updateUser = async (userId, userData) => {
-  const { first_name: firstName, last_name: lastName, role, password } = userData;
+  const { firstName, lastName, role, password } = userData;
 
   const fieldsToUpdate = {};
   if (firstName !== undefined) fieldsToUpdate.firstName = firstName;

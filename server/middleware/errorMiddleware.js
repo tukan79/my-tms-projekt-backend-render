@@ -1,12 +1,14 @@
 // Plik server/middleware/errorMiddleware.js
+const logger = require('../config/logger'); // Importujemy logger
 
 /**
  * Centralny middleware do obsługi błędów.
  * Loguje błędy i wysyła spójną odpowiedź do klienta.
  */
 module.exports = (error, req, res, next) => {
-  // Logowanie błędu po stronie serwera dla celów deweloperskich
-  console.error('Error caught by middleware:', error);
+  // Logowanie błędu za pomocą loggera winston
+  // Logujemy pełny obiekt błędu, aby mieć dostęp do stack trace i innych właściwości
+  logger.error(`${error.status || 500} - ${error.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`, { error });
 
   // Obsługa specyficznego błędu naruszenia unikalności z bazy danych PostgreSQL (kod '23505')
   if (error.code === '23505') {

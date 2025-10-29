@@ -31,8 +31,7 @@ exports.exportTrucks = async (req, res, next) => {
 
     res.status(200).json({ message: `File successfully exported to server as ${filename}` });
   } catch (error) {
-    console.error('Failed to export trucks:', error);
-    res.status(500).json({ error: 'An error occurred while exporting trucks.' });
+    next(error); // Przekazujemy błąd do centralnego error middleware
   }
 };
 
@@ -40,7 +39,7 @@ exports.createTruck = async (req, res, next) => {
   try {
     const truckData = req.body;
     if (!truckData.registration_plate || !truckData.brand) {
-      return res.status(400).json({ error: 'Numer rejestracyjny, marka i model są wymagane.' });
+      return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
     }
     
     // Mapujemy snake_case z req.body na camelCase dla serwisu
@@ -72,7 +71,6 @@ exports.importTrucks = async (req, res, next) => {
     const result = await truckService.importTrucks(trucks);
     res.status(201).json({ message: `${result.importedCount} trucks imported successfully.`, ...result });
   } catch (error) {
-    console.error('Failed to import trucks:', error);
     next(error);
   }
 };

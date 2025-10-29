@@ -2,8 +2,8 @@ const { Trailer, sequelize } = require('../models');
 
 const createTrailer = async (trailerData) => {
   const { 
-    registration_plate: registrationPlate, brand, description, category, max_payload_kg: maxPayloadKg, 
-    max_spaces: maxSpaces, length_m: lengthM, width_m: widthM, height_m: heightM, weight_kg: weightKg, status 
+    registration_plate: registrationPlate, brand, description, category, max_payload_kg: maxPayloadKg,
+    max_spaces: maxSpaces, length_m: lengthM, width_m: widthM, height_m: heightM, weight_kg: weightKg, status
   } = trailerData;
   try {
     const newTrailer = await Trailer.create({
@@ -36,8 +36,8 @@ const findTrailersByCompany = async () => {
 
 const updateTrailer = async (trailerId, trailerData) => {
   const { 
-    registration_plate: registrationPlate, brand, description, category, max_payload_kg: maxPayloadKg, 
-    max_spaces: maxSpaces, length_m: lengthM, width_m: widthM, height_m: heightM, weight_kg: weightKg, status 
+    registration_plate: registrationPlate, brand, description, category, max_payload_kg: maxPayloadKg,
+    max_spaces: maxSpaces, length_m: lengthM, width_m: widthM, height_m: heightM, weight_kg: weightKg, status
   } = trailerData;
 
   const dataToUpdate = {
