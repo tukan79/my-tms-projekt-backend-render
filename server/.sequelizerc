@@ -1,8 +1,10 @@
 const path = require('path');
 
 module.exports = {
-  'config': path.resolve('config', 'database.js'),
-  'models-path': path.resolve('models'),
-  'seeders-path': path.resolve('seeders'),
-  'migrations-path': path.resolve('migrations')
+  // Używamy path.join z __dirname, aby ścieżki były zawsze poprawne
+  // względem lokalizacji tego pliku konfiguracyjnego.
+  'config': path.join(__dirname, 'config', 'database.js'),
+  'models-path': path.join(__dirname, 'models'),
+  'seeders-path': path.join(__dirname, 'seeders'),
+  'migrations-path': path.join(__dirname, 'migrations')
 };
