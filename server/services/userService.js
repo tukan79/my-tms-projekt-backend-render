@@ -139,24 +139,26 @@ const importUsers = async (usersData) => {
 const createDefaultAdminUser = async () => {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@tms.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Password123!';
-
+  
   try {
     const existingAdmin = await User.findOne({ where: { email: adminEmail } });
-
+  
     if (existingAdmin) {
       // Jeśli użytkownik już istnieje, po prostu logujemy informację i kończymy.
       // This prevents the "unique constraint" error from appearing in logs on every start.
       console.log(`Default admin user '${adminEmail}' already exists. Skipping creation.`);
+      return; // Zakończ funkcję, aby uniknąć dalszego przetwarzania
     } else {
       // Jeśli użytkownik nie istnieje, tworzymy go.
       console.log(`Creating default admin user: ${adminEmail}`);
-      await createUser({
+      const newUser = await createUser({
         email: adminEmail,
         password: adminPassword,
         role: 'admin',
         firstName: 'Admin',
         lastName: 'User',
       });
+      console.log(`Successfully created default admin user: ${newUser.email}`);
     }
   } catch (error) {
     // Obsługujemy błąd, jeśli wystąpił wyścig (race condition)

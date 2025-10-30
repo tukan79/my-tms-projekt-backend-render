@@ -62,7 +62,7 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash); // Zmieniono na camelCase
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
