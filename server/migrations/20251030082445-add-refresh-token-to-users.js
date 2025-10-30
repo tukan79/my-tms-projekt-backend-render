@@ -2,7 +2,7 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('Users', 'refresh_token', {
+    await queryInterface.addColumn('users', 'refresh_token', {
       type: Sequelize.TEXT,
       allowNull: true,
       defaultValue: null
@@ -10,6 +10,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('Users', 'refresh_token');
+    await queryInterface.removeColumn('users', 'refresh_token');
   }
 };
