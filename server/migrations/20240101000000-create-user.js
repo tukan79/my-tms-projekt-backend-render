@@ -32,6 +32,10 @@ module.exports = {
         allowNull: false,
         defaultValue: 'user'
       },
+      refresh_token: {
+        type: Sequelize.STRING(512), // Zgodnie z modelem User
+        allowNull: true
+      },
       created_at: {
         allowNull: false,
         type: Sequelize.DATE,

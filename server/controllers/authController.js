@@ -24,14 +24,14 @@ const register = async (req, res, next) => {
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { email, password, first_name, last_name } = req.body;
+    const { email, password, firstName, lastName } = req.body;
 
     // Poprawka: Jawnie ustawiamy rolę na 'user' podczas rejestracji.
     const newUser = await userService.createUser({
       email: email,
       password,
-      firstName: first_name,
-      lastName: last_name,
+      firstName: firstName,
+      lastName: lastName,
       role: 'user',
     });
 
