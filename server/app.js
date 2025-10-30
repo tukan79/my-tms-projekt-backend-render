@@ -82,6 +82,17 @@ app.use(cors(corsOptions));
 // Jawna obsługa zapytań preflight (OPTIONS)
 app.options('*', cors(corsOptions));
 
+// Ogranicznik żądań, aby chronić przed atakami brute-force
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minut
+  // Zwiększamy limit w środowisku deweloperskim, aby uniknąć problemów z podwójnym renderowaniem w React.
+  // Increase the limit in the development environment to avoid issues with React's double rendering.
+  max: process.env.NODE_ENV === 'production' ? 100 : 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', limiter); // Stosuj do wszystkich tras API
+
 // Ochrona przed atakami HTTP Parameter Pollution
 app.use(hpp());
 
@@ -94,17 +105,6 @@ app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
-
-// Ogranicznik żądań, aby chronić przed atakami brute-force
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minut
-  // Zwiększamy limit w środowisku deweloperskim, aby uniknąć problemów z podwójnym renderowaniem w React.
-  // Increase the limit in the development environment to avoid issues with React's double rendering.
-  max: process.env.NODE_ENV === 'production' ? 100 : 500,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api', limiter); // Stosuj do wszystkich tras API
 
 // Zaawansowane logowanie z morgan, które zawiera również ciało żądania
 if (process.env.NODE_ENV !== 'production') {
