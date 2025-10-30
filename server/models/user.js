@@ -23,11 +23,9 @@ module.exports = (sequelize, DataTypes) => {
     // dzięki opcji `underscored: true` w config/database.js
     firstName: {
       type: DataTypes.STRING,
-      field: 'first_name', // Jawne określenie nazwy kolumny w bazie
     },
     lastName: {
       type: DataTypes.STRING,
-      field: 'last_name',
     },
     email: {
       type: DataTypes.STRING,
@@ -37,7 +35,6 @@ module.exports = (sequelize, DataTypes) => {
     passwordHash: {
       type: DataTypes.STRING,
       allowNull: false,
-      field: 'password_hash',
     },
     role: {
       type: DataTypes.STRING,
