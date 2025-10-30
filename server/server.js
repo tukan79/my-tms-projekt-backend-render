@@ -8,6 +8,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const app = require('./app.js');
 const { sequelize } = require('./models'); // Importujemy instancję Sequelize
+const userService = require('./services/userService.js'); // Importujemy serwis użytkownika
 
 // Używamy bardziej specyficznej zmiennej, aby uniknąć konfliktów z globalnym `PORT`
 // Na platformach takich jak Render, aplikacja musi nasłuchiwać na porcie zdefiniowanym w zmiennej środowiskowej `PORT`.
@@ -22,6 +23,9 @@ const startServer = async () => {
     console.log('🔵 Verifying database connection...');
     await sequelize.authenticate(); // Używamy metody Sequelize do weryfikacji połączenia
     console.log('✅ Database connection has been established successfully.');
+
+    // Krok 1a: Utwórz domyślnego użytkownika-administratora, jeśli nie istnieje.
+    await userService.createDefaultAdminUser();
 
     // Krok 2: Uruchom serwer Express
     server = app.listen(PORT, '0.0.0.0', () => {
