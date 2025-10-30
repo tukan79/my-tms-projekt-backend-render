@@ -45,6 +45,7 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   // Adres URL aplikacji wdrożonej na Vercel
   'https://my-tms-project-frontend-o22jv2q3m-krzysztofs-projects-36780459.vercel.app',
+  'https://my-tms-project-frontend.vercel.app', // Dodajemy główny adres Vercel
   // Adres URL backendu na Railway (na wszelki wypadek, gdyby były jakieś wewnętrzne żądania)
   'https://my-tms-project-production.up.railway.app',
 ];

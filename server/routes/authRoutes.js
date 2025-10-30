@@ -2,7 +2,7 @@
 const express = require('express');
 const { rateLimit } = require('express-rate-limit'); // Zmiana na import destrukturyzowany
 const authController = require('../controllers/authController.js');
-const { authenticateToken } = require('../middleware/authMiddleware.js');
+const authMiddleware = require('../middleware/authMiddleware.js');
 
 // Dedykowany limiter dla tras logowania i rejestracji, aby chronić przed atakami brute-force
 // Dedicated limiter for login and registration routes to protect against brute-force attacks
@@ -30,7 +30,7 @@ router.post('/refresh', authController.refreshToken);
 
 // Dodajemy brakującą trasę do weryfikacji tokenu
 // Adding the missing route for token verification
-router.get('/verify', authenticateToken, authController.verifyToken);
+router.get('/verify', authMiddleware.authenticateToken, authController.verifyToken);
 
 // Trasa statusu serwera (można przenieść do innego pliku, np. systemRoutes.js)
 // Server status route (can be moved to another file, e.g., systemRoutes.js)
