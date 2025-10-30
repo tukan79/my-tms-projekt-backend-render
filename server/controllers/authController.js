@@ -136,6 +136,10 @@ const refreshToken = async (req, res, next) => {
     const accessToken = authService.refreshAccessToken(user);
     res.json({ accessToken });
   } catch (error) {
+    // Dodajemy bardziej szczegółową obsługę błędów weryfikacji JWT
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(403).json({ error: 'Refresh token has expired. Please log in again.' });
+    }
     next(error);
   }
 };
