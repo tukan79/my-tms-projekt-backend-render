@@ -52,6 +52,7 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: true, // Automatycznie dodaje createdAt i updatedAt
     paranoid: true, // Włącza "soft delete" - `isDeleted` będzie zarządzane automatycznie
     deletedAt: 'isDeleted', // Używamy `isDeleted` zamiast domyślnego `deletedAt`
+    underscored: true, // Zapewnia, że wszystkie pola (np. createdAt) będą w snake_case
   });
   return User;
 };
