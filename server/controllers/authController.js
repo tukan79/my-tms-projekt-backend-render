@@ -3,8 +3,9 @@ const validator = require('validator');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const userService = require('../services/userService.js');
 const { isStrongPassword, passwordStrengthMessage } = require('../utils/validation.js');
+const authService = require('../services/authService.js'); // Importujemy nowy serwis
+const userService = require('../services/userService.js'); // Pozostawiamy dla operacji na użytkownikach
 
 const registerValidation = [
   body('email').isEmail().withMessage('Please provide a valid email.').normalizeEmail(),
@@ -56,27 +57,13 @@ const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // Używamy nowej, scentralizowanej funkcji logowania z serwisu
     const user = await userService.loginUser(email, password);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET is not set');
-      return res.status(500).json({ error: 'Server configuration error.' });
-    }
-
-    // Krok 1: Stwórz accessToken (krótki czas życia)
-    const tokenPayload = { userId: user.id, email: user.email, role: user.role };
-    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '15m' });
-
-    // Krok 2: Stwórz refreshToken (długi czas życia)
-    const refreshToken = jwt.sign(tokenPayload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
-
-    // Krok 3: Zapisz refreshToken w bazie danych
-    await userService.updateUserRefreshToken(user.id, refreshToken);
+    const { accessToken, refreshToken } = await authService.generateTokens(user);
 
     // Krok 4: Wyślij refreshToken w bezpiecznym ciasteczku httpOnly
     res.cookie('refreshToken', refreshToken, {
@@ -145,8 +132,7 @@ const refreshToken = async (req, res, next) => {
       }
 
       // Jeśli wszystko jest w porządku, wygeneruj nowy accessToken
-      const tokenPayload = { userId: user.id, email: user.email, role: user.role };
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '15m' });
+      const accessToken = authService.refreshAccessToken(user);
 
       res.json({ accessToken });
     });
