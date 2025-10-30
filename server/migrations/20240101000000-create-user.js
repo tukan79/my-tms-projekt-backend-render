@@ -44,7 +44,7 @@ module.exports = {
       },
       is_deleted: {
         type: Sequelize.BOOLEAN,
-        defaultValue: false
+        defaultValue: null // Zmieniamy na null, aby było zgodne z trybem paranoid
       }
     });
   },
