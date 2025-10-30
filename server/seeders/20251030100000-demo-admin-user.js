@@ -11,7 +11,7 @@ module.exports = {
     await queryInterface.bulkInsert('users', [{
       first_name: 'Admin',
       last_name: 'User',
-      email: process.env.ADMIN_EMAIL || 'admin@example.com',
+      email: process.env.ADMIN_EMAIL || 'admin@tms.com',
       password_hash: passwordHash,
       role: 'admin',
       refresh_token: null, // Dodajemy pole refreshToken, aby było zgodne z modelem
@@ -23,7 +23,7 @@ module.exports = {
   async down (queryInterface, Sequelize) {
     // Usuwa tylko tego konkretnego użytkownika
     await queryInterface.bulkDelete('users', {
-      email: process.env.ADMIN_EMAIL || 'admin@example.com'
+      email: process.env.ADMIN_EMAIL || 'admin@tms.com'
     }, {});
   }
 };

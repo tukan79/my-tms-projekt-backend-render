@@ -143,7 +143,12 @@ const createDefaultAdminUser = async () => {
   try {
     const existingAdmin = await User.findOne({ where: { email: adminEmail } });
 
-    if (!existingAdmin) {
+    if (existingAdmin) {
+      // Jeśli użytkownik już istnieje, po prostu logujemy informację i kończymy.
+      // This prevents the "unique constraint" error from appearing in logs on every start.
+      console.log(`Default admin user '${adminEmail}' already exists. Skipping creation.`);
+    } else {
+      // Jeśli użytkownik nie istnieje, tworzymy go.
       console.log(`Creating default admin user: ${adminEmail}`);
       await createUser({
         email: adminEmail,
@@ -154,7 +159,13 @@ const createDefaultAdminUser = async () => {
       });
     }
   } catch (error) {
-    console.error('Error creating default admin user:', error);
+    // Obsługujemy błąd, jeśli wystąpił wyścig (race condition)
+    // i inny proces utworzył użytkownika w międzyczasie.
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      console.warn(`Could not create default admin user '${adminEmail}' because it already exists (race condition).`);
+    } else {
+      console.error('Error creating default admin user:', error);
+    }
   }
 };
 
