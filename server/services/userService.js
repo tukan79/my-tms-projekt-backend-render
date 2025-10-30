@@ -123,11 +123,39 @@ const importUsers = async (usersData) => {
     // Używamy `bulkCreate` z opcją `updateOnDuplicate`, aby obsłużyć konflikty
     const importedUsers = await User.bulkCreate(usersToCreateOrUpdate, {
       transaction: t,
-      updateOnDuplicate: ['firstName', 'lastName', 'role'], // Nie aktualizujemy hasła przy konflikcie
+      // Pola do aktualizacji, jeśli użytkownik o danym `email` (unique key) już istnieje.
+      // Celowo nie aktualizujemy `passwordHash`, aby import nie nadpisywał istniejących haseł.
+      updateOnDuplicate: ['firstName', 'lastName', 'role'],
     });
 
     return { count: importedUsers.length, importedIds: importedUsers.map(u => u.id), errors };
   });
+};
+
+/**
+ * Tworzy domyślnego użytkownika-administratora, jeśli nie istnieje.
+ * Przydatne do inicjalizacji środowiska deweloperskiego.
+ */
+const createDefaultAdminUser = async () => {
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@tms.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'password123';
+
+  try {
+    const existingAdmin = await User.findOne({ where: { email: adminEmail } });
+
+    if (!existingAdmin) {
+      console.log(`Creating default admin user: ${adminEmail}`);
+      await createUser({
+        email: adminEmail,
+        password: adminPassword,
+        role: 'admin',
+        firstName: 'Admin',
+        lastName: 'User',
+      });
+    }
+  } catch (error) {
+    console.error('Error creating default admin user:', error);
+  }
 };
 
 module.exports = {
@@ -140,4 +168,5 @@ module.exports = {
   importUsers,
   updateUserRefreshToken,
   findUserByRefreshToken,
+  createDefaultAdminUser,
 };
