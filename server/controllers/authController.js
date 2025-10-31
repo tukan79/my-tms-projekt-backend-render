@@ -111,7 +111,7 @@ const verifyToken = async (req, res, next) => {
       firstName: user.firstName,
       lastName: user.lastName,
     };
-    return res.json({ user: userPayload });
+    return res.json({ valid: true, user: userPayload });
   } catch (error) {
     next(error);
   }
