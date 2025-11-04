@@ -98,6 +98,24 @@ const exportUsers = async (req, res, next) => {
   }
 };
 
+const getMe = async (req, res, next) => {
+  try {
+    // req.auth jest dodawane przez middleware authenticateToken
+    if (!req.auth || !req.auth.userId) {
+      return res.status(401).json({ error: 'Authentication data not found.' });
+    }
+
+    // Używamy serwisu, aby znaleźć użytkownika na podstawie ID z tokenu
+    const user = await userService.findUserById(req.auth.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    res.status(200).json(user); // Serwis już wyklucza hash hasła
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllUsers,
   createUser,
@@ -105,4 +123,5 @@ module.exports = {
   deleteUser,
   importUsers,
   exportUsers,
+  getMe,
 };

@@ -4,6 +4,10 @@ const { authenticateToken, requireRole } = require('../middleware/authMiddleware
 const { validateUserCreation, validateUserUpdate } = require('../middleware/validationMiddleware.js');
 
 const router = express.Router();
+
+// Endpoint dostępny dla każdego zalogowanego użytkownika
+router.get('/me', authenticateToken, userController.getMe);
+
 router.use(authenticateToken, requireRole(['admin']));
 
 router.get('/', userController.getAllUsers);
