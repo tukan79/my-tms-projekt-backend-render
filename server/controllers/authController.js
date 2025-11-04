@@ -80,6 +80,7 @@ const login = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', // tylko HTTPS w produkcji
       sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      path: '/api/auth/refresh', // 👈 Kluczowe: ciasteczko dostępne tylko dla tej ścieżki
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dni
     });
 
@@ -128,17 +129,21 @@ const refreshToken = async (req, res, next) => {
   try {
     console.log('🔁 Refresh request received. Cookie present:', !!tokenFromCookie);
 
-    const user = await userService.findUserByRefreshToken(tokenFromCookie);
+    // Krok 1: Zweryfikuj token JWT, aby upewnić się, że jest poprawny i nie wygasł.
+    const decoded = jwt.verify(tokenFromCookie, process.env.REFRESH_TOKEN_SECRET);
+
+    // Krok 2: Znajdź użytkownika na podstawie ID z tokenu.
+    const user = await userService.findUserById(decoded.userId);
     if (!user) {
-      return res.status(403).json({ error: 'Nieprawidłowy token odświeżający.' });
+      return res.status(403).json({ error: 'Użytkownik powiązany z tym tokenem już nie istnieje.' });
     }
 
-    const decoded = jwt.verify(tokenFromCookie, process.env.JWT_REFRESH_SECRET);
-    if (user.id !== decoded.userId) {
-      return res.status(403).json({ error: 'Niezgodność tokenu odświeżającego.' });
+    // Krok 3: Sprawdź, czy token w cookie zgadza się z tym w bazie danych.
+    if (user.refreshToken !== tokenFromCookie) {
+      return res.status(403).json({ error: 'Token odświeżający jest nieaktualny. Zaloguj się ponownie.' });
     }
 
-    // Generujemy nowy accessToken
+    // Krok 4: Generujemy nowy accessToken
     const accessToken = await authService.refreshAccessToken(user);
 
     return res.json({ accessToken });
@@ -167,6 +172,7 @@ const logout = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      path: '/api/auth/refresh', // 👈 Musi być zgodne z ustawieniami przy tworzeniu
     });
 
     return res.status(200).json({ message: 'Wylogowano pomyślnie.' });

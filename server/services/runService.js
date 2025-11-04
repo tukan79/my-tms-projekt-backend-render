@@ -50,7 +50,14 @@ const findAllRuns = async (filters = {}) => {
     ],
   });
 
-  return runs;
+  // Transformacja danych, aby dodać *_id na najwyższym poziomie dla frontendu
+  return runs.map(run => {
+    const plainRun = run.get({ plain: true });
+    plainRun.driver_id = plainRun.driver?.id || null;
+    plainRun.truck_id = plainRun.truck?.id || null;
+    plainRun.trailer_id = plainRun.trailer?.id || null;
+    return plainRun;
+  });
 };
 
 const deleteRun = async (id) => {

@@ -1,5 +1,6 @@
 // Plik: server/services/feedbackService.js
 const nodemailer = require('nodemailer');
+const { BugReport } = require('../models');
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
@@ -9,6 +10,21 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+});
+
+/**
+ * Zapisuje zgłoszenie błędu w bazie danych.
+ * @param {string} description - Opis błędu.
+ * @param {object} context - Kontekst zgłoszenia (dane użytkownika, URL itp.).
+ * @param {number} userId - ID użytkownika zgłaszającego.
+ * @returns {Promise<object>} Nowo utworzony obiekt zgłoszenia.
+ */
+const createBugReport = async (description, context, userId) => {
+  return BugReport.create({
+    description,
+    context,
+    userId,
+  });
 });
 
 const sendBugReportEmail = async (description, context) => {
@@ -55,4 +71,5 @@ const sendBugReportEmail = async (description, context) => {
 
 module.exports = {
   sendBugReportEmail,
+  createBugReport,
 };

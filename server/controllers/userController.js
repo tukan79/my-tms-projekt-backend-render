@@ -2,10 +2,21 @@
 const userService = require('../services/userService.js');
 const Papa = require('papaparse');
 
+// Funkcja pomocnicza do transformacji obiektu użytkownika na format snake_case
+const toSnakeCaseUser = (user) => {
+  if (!user) return null;
+  const { firstName, lastName, ...rest } = user.get({ plain: true });
+  return {
+    ...rest,
+    first_name: firstName,
+    last_name: lastName,
+  };
+};
+
 const getAllUsers = async (req, res, next) => {
   try {
     const users = await userService.findAllUsers();
-    res.status(200).json({ users: users || [] });
+    res.status(200).json({ users: users ? users.map(toSnakeCaseUser) : [] });
   } catch (error) {
     next(error);
   }
@@ -21,7 +32,7 @@ const createUser = async (req, res, next) => {
       firstName: req.body.first_name,
       lastName: req.body.last_name,
     */
-    res.status(201).json(newUser);
+    res.status(201).json(toSnakeCaseUser(newUser));
   } catch (error) {
     next(error);
   }
@@ -35,7 +46,7 @@ const updateUser = async (req, res, next) => {
     if (!updatedUser) {
       return res.status(404).json({ error: 'User not found.' });
     }
-    res.status(200).json(updatedUser);
+    res.status(200).json(toSnakeCaseUser(updatedUser));
   } catch (error) {
     next(error);
   }
@@ -110,7 +121,7 @@ const getMe = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
-    res.status(200).json(user); // Serwis już wyklucza hash hasła
+    res.status(200).json(toSnakeCaseUser(user)); // Transformacja do snake_case
   } catch (error) {
     next(error);
   }
