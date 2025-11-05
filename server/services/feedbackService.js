@@ -4,7 +4,7 @@ const logger = require('../config/logger.js'); // Użyjemy loggera dla spójnoś
 
 const sendBugReportEmail = async (bugReport) => {
   try {
-    const transporter = nodemailer.createTransport({
+    const transportConfig = {
       host: process.env.EMAIL_HOST,
       port: Number(process.env.EMAIL_PORT) || 587,
       secure: process.env.EMAIL_SECURE === 'true',
@@ -12,11 +12,21 @@ const sendBugReportEmail = async (bugReport) => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      connectionTimeout: 10000, // 10 sekund
       tls: {
         // Opcjonalne: potrzebne w niektórych środowiskach chmurowych (np. Railway)
         rejectUnauthorized: false,
       },
+    };
+
+    // Logowanie konfiguracji (bez hasła) w celu diagnostyki
+    const { pass, ...configToLog } = transportConfig.auth;
+    logger.info('📧 Attempting to create SMTP transport with config:', {
+      ...transportConfig,
+      auth: configToLog,
     });
+
+    const transporter = nodemailer.createTransport(transportConfig);
 
     // Krok 1: Weryfikacja połączenia z serwerem SMTP
     await transporter.verify();
