@@ -1,7 +1,7 @@
 // Plik: server/controllers/feedbackController.js
-const feedbackService = require('../services/feedbackService.js');
+const { sendBugReportEmail, createBugReport } = require('../services/feedbackService.js');
 
-exports.reportBug = async (req, res, next) => {
+exports.reportBug = async (req, res) => {
   try {
     const { description, context } = req.body;
 
@@ -9,31 +9,28 @@ exports.reportBug = async (req, res, next) => {
       return res.status(400).json({ error: 'Description is required.' });
     }
 
-    // Sprawdzamy, czy użytkownik jest zalogowany (czy istnieje req.auth)
-    const userId = req.auth ? req.auth.userId : null;
-    const reportingUser = req.auth ? { email: req.auth.email, userId: req.auth.userId, role: req.auth.role } : { email: 'Anonymous' };
-
-    // Dodajemy informacje o użytkowniku (jeśli jest) i inne dane kontekstowe
-    const reportContext = {
-      ...context,
-      userAgent: req.headers['user-agent'], // Dodajemy User-Agent
+    const bugContext = {
+      reportingUser: context?.reportingUser || {
+        email: 'anonymous@mytms.app',
+        userId: null,
+        role: 'guest',
+      },
+      url: context?.url || req.headers.referer || 'unknown',
+      userAgent: req.headers['user-agent'] || 'unknown',
     };
 
-    // Krok 1: Zapisz zgłoszenie w bazie danych
-    const newReport = await feedbackService.createBugReport(description, reportContext, userId);
+    // 1️⃣ Zapisz w bazie
+    const report = await createBugReport(description, bugContext, bugContext.reportingUser.userId);
 
-    // Krok 2 (Opcjonalny): Wyślij powiadomienie email
-    const emailContext = { ...reportContext, reportingUser };
-    feedbackService.sendBugReportEmail(description, emailContext).catch(emailError => {
-      // Logujemy błąd wysyłki, ale nie blokujemy odpowiedzi dla użytkownika
-      // Używamy loggera dla spójności
-      const logger = require('../config/logger.js');
-      logger.error('Failed to send bug report email, but the report was saved.', { error: emailError });
+    // 2️⃣ Wyślij e-mail (jeśli działa SMTP)
+    await sendBugReportEmail(description, bugContext);
+
+    res.status(201).json({
+      message: 'Bug report submitted successfully.',
+      reportId: report.id,
     });
-
-    res.status(201).json({ message: 'Bug report submitted successfully.', reportId: newReport.id });
   } catch (error) {
-    // Przekazujemy błąd do globalnego error handlera
-    next(error);
+    console.error('❌ Error in reportBug:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 };
