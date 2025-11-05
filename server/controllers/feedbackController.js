@@ -1,36 +1,34 @@
 // Plik: server/controllers/feedbackController.js
-const { sendBugReportEmail, createBugReport } = require('../services/feedbackService.js');
+const { BugReport } = require('../models/index.js');
+const { sendBugReportEmail } = require('../services/feedbackService.js');
 
 exports.reportBug = async (req, res) => {
   try {
-    const { description, context } = req.body;
-
-    if (!description || description.trim() === '') {
+    const { description } = req.body;
+    if (!description) {
       return res.status(400).json({ error: 'Description is required.' });
     }
 
-    const bugContext = {
-      reportingUser: context?.reportingUser || {
-        email: 'anonymous@mytms.app',
-        userId: null,
-        role: 'guest',
+    const bugReport = await BugReport.create({
+      description,
+      context: {
+        url: req.headers.referer || 'unknown',
+        userAgent: req.headers['user-agent'],
+        reportingUser: req.user
+          ? { userId: req.user.id, email: req.user.email, role: req.user.role }
+          : { userId: null, email: 'anonymous@mytms.app', role: 'guest' },
       },
-      url: context?.url || req.headers.referer || 'unknown',
-      userAgent: req.headers['user-agent'] || 'unknown',
-    };
-
-    // 1️⃣ Zapisz w bazie
-    const report = await createBugReport(description, bugContext, bugContext.reportingUser.userId);
-
-    // 2️⃣ Wyślij e-mail (jeśli działa SMTP)
-    await sendBugReportEmail(description, bugContext);
-
-    res.status(201).json({
-      message: 'Bug report submitted successfully.',
-      reportId: report.id,
+      status: 'new',
     });
+
+    // 🔔 Wyślij e-mail w tle
+    sendBugReportEmail(bugReport).catch((err) =>
+      console.error('Error while sending bug report email:', err)
+    );
+
+    return res.status(201).json({ message: 'Bug report submitted successfully', bugReport });
   } catch (error) {
-    console.error('❌ Error in reportBug:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('Error submitting bug report:', error);
+    return res.status(500).json({ error: 'Failed to submit bug report' });
   }
 };
