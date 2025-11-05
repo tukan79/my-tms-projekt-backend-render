@@ -1,5 +1,6 @@
 // Plik: server/services/feedbackService.js
 const nodemailer = require('nodemailer');
+const logger = require('../config/logger.js'); // Użyjemy loggera dla spójności
 
 const sendBugReportEmail = async (bugReport) => {
   try {
@@ -17,6 +18,10 @@ const sendBugReportEmail = async (bugReport) => {
       },
     });
 
+    // Krok 1: Weryfikacja połączenia z serwerem SMTP
+    await transporter.verify();
+    logger.info('📧 SMTP Connection verified successfully.');
+
     const mailOptions = {
       from: process.env.EMAIL_FROM || `"MyTMS Bug Reporter" <${process.env.EMAIL_USER}>`,
       to: process.env.EMAIL_TO || process.env.BUG_REPORT_EMAIL,
@@ -33,10 +38,11 @@ const sendBugReportEmail = async (bugReport) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log('📧 Bug report email sent successfully');
+    // Krok 2: Wysyłka e-maila
+    const info = await transporter.sendMail(mailOptions);
+    logger.info('✅ Bug report email sent successfully', { messageId: info.messageId });
   } catch (err) {
-    console.error('❌ Failed to send bug report email:', err.message);
+    logger.error('❌ Failed to send bug report email. Check SMTP configuration.', { error: err });
   }
 };
 
