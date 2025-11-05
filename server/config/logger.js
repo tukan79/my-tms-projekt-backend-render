@@ -4,8 +4,13 @@ const winston = require('winston');
 const { createLogger, format, transports } = winston;
 const { combine, timestamp, printf, colorize } = format;
 
-const logFormat = printf(({ level, message, timestamp: ts, stack }) => {
-  return `${ts} ${level}: ${stack || message}`;
+const logFormat = printf(({ level, message, timestamp: ts, stack, ...meta }) => {
+  // Jeśli istnieją dodatkowe metadane (np. obiekt błędu), dołącz je jako JSON.
+  const metaString = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
+  // Jeśli istnieje stack trace, użyj go; w przeciwnym razie użyj samej wiadomości.
+  const logMessage = stack || message;
+
+  return `${ts} ${level}: ${logMessage} ${metaString}`;
 });
 
 const logger = createLogger({
