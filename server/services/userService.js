@@ -47,7 +47,6 @@ const loginUser = async (email, password) => {
 
     const user = await User.findOne({
       where: { email: email.toLowerCase() },
-      paranoid: false, // <- KLUCZOWE: WYŁĄCZ SOFT DELETE
     });
 
     console.log('👤 USER FOUND:', user ? 'YES - ' + user.email : 'NO');

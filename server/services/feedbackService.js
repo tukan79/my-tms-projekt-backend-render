@@ -58,14 +58,15 @@ const sendBugReportEmail = async (description, context) => {
   };
 
   try {
-    console.log('Attempting to send bug report email...');
+    console.log('📧 Attempting to send bug report email...');
     const info = await transporter.sendMail(mailOptions);
-    console.log('Bug report email sent successfully:', info.messageId);
+    console.log('✅ Bug report email sent successfully:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending bug report email:', error);
-    // Rzucamy błąd dalej, aby kontroler mógł go obsłużyć
-    throw new Error('Failed to send email. Please check server configuration.');
+    console.error('⚠️ Email send failed:', error.message);
+    console.warn('Bug report saved in DB but email notification was not sent.');
+    // Nie przerywamy — pozwalamy kontrolerowi zakończyć proces sukcesem.
+    return null;
   }
 };
 
