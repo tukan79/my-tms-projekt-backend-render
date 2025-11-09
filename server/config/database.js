@@ -20,7 +20,6 @@ module.exports = {
     password: process.env.DB_PASSWORD || null,
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
-    logging: console.log, // Log SQL queries in development
     port: process.env.DB_PORT,
   },
   production: {
@@ -31,7 +30,6 @@ module.exports = {
         require: true,
         rejectUnauthorized: false,
       },
-    },    
-    logging: false, // Disable SQL query logging in production for performance and security
+    },
   },
 };
