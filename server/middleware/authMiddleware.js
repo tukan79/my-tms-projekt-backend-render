@@ -1,27 +1,39 @@
 // Plik server/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
+const logger = require('../config/logger'); // Używamy naszego standardowego loggera
 
 const authenticateToken = (req, res, next) => {
   // Token z cookie lub nagłówka Authorization: Bearer <token>
   const header = req.headers.authorization;
   const headerToken = header && header.startsWith('Bearer ') ? header.slice(7) : null;
-  const cookieToken = req.cookies?.token;
-  const token = headerToken || cookieToken; // Pozostawiamy cookieToken dla ewentualnej przyszłej kompatybilności
+  const token = headerToken; // Używamy tylko tokenu z nagłówka dla standardu REST API
+
+  logger.debug('🔐 Auth Middleware - Checking for token...', {
+    method: req.method,
+    url: req.originalUrl,
+    hasToken: !!token,
+  });
 
   if (!token) {
+    logger.warn('❌ Auth Middleware - No token provided.', { url: req.originalUrl });
     return res.status(401).json({ error: 'Authentication token is missing.' });
   }
 
   if (!process.env.JWT_SECRET) {
-    console.error('Server Error: JWT_SECRET is not defined.');
+    logger.error('CRITICAL: JWT_SECRET is not defined in server environment.');
     return res.status(500).json({ error: 'Server configuration error.' });
   }
   try {
     const auth = jwt.verify(token, process.env.JWT_SECRET);
     req.auth = auth; // np. { userId: 1, email: '...', role: 'admin' }
+    logger.info('✅ Auth Middleware - Token verified successfully.', { userId: auth.userId, role: auth.role });
     return next();
   } catch (err) {
-    // Błąd weryfikacji tokenu (np. wygasł)
+    // Logujemy błąd weryfikacji tokenu
+    logger.error('❌ Auth Middleware - Token verification failed.', {
+      error: err.message,
+      token,
+    });
     return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 };
