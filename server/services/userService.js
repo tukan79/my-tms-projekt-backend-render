@@ -20,11 +20,20 @@ const createUser = async (userData) => {
 };
 
 const findAllUsers = async () => {
-  // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
-  return User.findAll({
-    attributes: { exclude: ['passwordHash'] }, // Nie zwracamy hasha hasła
-    order: [['lastName', 'ASC'], ['firstName', 'ASC']],
-  });
+  try {
+    // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
+    const users = await User.findAll({
+      attributes: { exclude: ['passwordHash'] }, // Nie zwracamy hasha hasła
+      order: [['lastName', 'ASC'], ['firstName', 'ASC']],
+    });
+    console.log('👤 Users from database:', users.length, 'records');
+    // Opcjonalnie: odkomentuj poniższą linię, aby zobaczyć pełne dane w konsoli
+    // console.log('👤 Users data:', JSON.stringify(users, null, 2));
+    return users;
+  } catch (error) {
+    console.error('❌ Error fetching users:', error);
+    throw error; // Rzucamy błąd dalej, aby został obsłużony przez errorMiddleware
+  }
 };
 
 const findUserByEmailWithPassword = async (email) => {

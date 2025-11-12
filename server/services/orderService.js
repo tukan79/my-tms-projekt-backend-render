@@ -71,11 +71,20 @@ const createOrder = async (orderData) => {
 };
 
 const findAllOrders = async () => {
-  return Order.findAll({
-    where: { isDeleted: false }, // paranoid: true w modelu automatycznie dodaje ten warunek
-    order: [['createdAt', 'DESC']],
-    include: [{ model: Customer, as: 'customer', attributes: ['name', 'customerCode'] }], // Dołącz dane klienta
-  });
+  try {
+    const orders = await Order.findAll({
+      where: { isDeleted: false }, // paranoid: true w modelu automatycznie dodaje ten warunek
+      order: [['createdAt', 'DESC']],
+      include: [{ model: Customer, as: 'customer', attributes: ['name', 'customerCode'] }], // Dołącz dane klienta
+    });
+    console.log('📦 Orders from database:', orders.length, 'records');
+    // Opcjonalnie: odkomentuj poniższą linię, aby zobaczyć pełne dane w konsoli
+    // console.log('📦 Orders data:', JSON.stringify(orders, null, 2));
+    return orders;
+  } catch (error) {
+    console.error('❌ Error fetching orders:', error);
+    throw error; // Rzucamy błąd dalej, aby został obsłużony przez errorMiddleware
+  }
 };
 
 const updateOrder = async (orderId, orderData) => {
