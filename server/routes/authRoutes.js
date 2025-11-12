@@ -25,8 +25,8 @@ router.post('/login', authLimiter, authController.loginValidation, authControlle
 // Dodajemy trasę do wylogowania
 router.post('/logout', authController.logout);
 
-// Nowa trasa do odświeżania tokenu
-router.post('/refresh-token', authController.refreshToken);
+// Trasa do odświeżania tokenu
+router.post('/refresh', authController.refreshToken);
 
 // Endpoint do pobierania danych zalogowanego użytkownika na podstawie tokenu
 // Endpoint to get the current user's data based on the token
