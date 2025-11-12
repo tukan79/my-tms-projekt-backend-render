@@ -29,7 +29,10 @@ const findAllUsers = async () => {
     console.log('👤 Users from database:', users.length, 'records');
     // Opcjonalnie: odkomentuj poniższą linię, aby zobaczyć pełne dane w konsoli
     // console.log('👤 Users data:', JSON.stringify(users, null, 2));
-    return users;
+    
+    // ✅ UJEDNOLICONE: Zawsze zwracaj obiekt z kluczem `users`
+    // Zapewnia to spójność odpowiedzi API.
+    return { users: users };
   } catch (error) {
     console.error('❌ Error fetching users:', error);
     throw error; // Rzucamy błąd dalej, aby został obsłużony przez errorMiddleware
