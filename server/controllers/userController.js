@@ -25,13 +25,14 @@ const getAllUsers = async (req, res, next) => {
 const createUser = async (req, res, next) => {
   try {
     // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const newUser = await userService.createUser(req.body);
-    /*
-      email: req.body.email,
+    const { email, password, role, first_name, last_name } = req.body;
+    const newUser = await userService.createUser({
+      email,
       password: req.body.password,
-      firstName: req.body.first_name,
-      lastName: req.body.last_name,
-    */
+      role,
+      firstName: first_name,
+      lastName: last_name,
+    });
     res.status(201).json(toSnakeCaseUser(newUser));
   } catch (error) {
     next(error);
