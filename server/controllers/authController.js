@@ -131,7 +131,12 @@ const refreshToken = async (req, res, next) => {
     console.log('🔁 Refresh request received. Cookie present:', !!tokenFromCookie);
 
     // Krok 1: Zweryfikuj token JWT, aby upewnić się, że jest poprawny i nie wygasł.
-    const decoded = jwt.verify(tokenFromCookie, process.env.REFRESH_TOKEN_SECRET);
+    // Use the same env name as authService: JWT_REFRESH_SECRET
+    if (!process.env.JWT_REFRESH_SECRET) {
+      console.error('CRITICAL: JWT_REFRESH_SECRET is not set!');
+      return res.status(500).json({ error: 'Server configuration error.' });
+    }
+    const decoded = jwt.verify(tokenFromCookie, process.env.JWT_REFRESH_SECRET);
 
     // Krok 2: Znajdź użytkownika na podstawie ID z tokenu.
     const user = await userService.findUserById(decoded.userId);
@@ -164,6 +169,7 @@ const refreshToken = async (req, res, next) => {
     if (error instanceof jwt.TokenExpiredError) {
       return res.status(403).json({ error: 'Token odświeżający wygasł. Proszę zalogować się ponownie.' });
     }
+    console.error('Refresh token error:', error);
     next(error);
   }
 };
