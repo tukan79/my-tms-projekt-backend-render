@@ -40,26 +40,22 @@ app.use(express.json({ limit: '10mb' }));
 
 app.use(helmet());
 
+// --- Konfiguracja CORS ---
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CORS_ALLOW_LOCALHOST, // Opcjonalny drugi URL, np. http://127.0.0.1:5173
+].filter(Boolean); // Usuwa puste wartości, jeśli zmienne środowiskowe nie są ustawione
+
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOriginsPatterns = [
-      /\.vercel\.app$/,
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-    ];
-    if (!origin || allowedOriginsPatterns.some(pattern => {
-      if (pattern instanceof RegExp) return pattern.test(origin);
-      return origin === pattern;
-    })) {
+    // Zezwalaj na żądania bez 'origin' (np. z Postmana, cURL) oraz te z listy dozwolonych
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`Not allowed by CORS for origin: ${origin}`));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
 app.use(cors(corsOptions));
