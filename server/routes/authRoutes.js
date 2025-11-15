@@ -7,15 +7,17 @@ const authMiddleware = require('../middleware/authMiddleware.js');
 // Dedykowany limiter dla tras logowania i rejestracji, aby chronić przed atakami brute-force
 // Dedicated limiter for login and registration routes to protect against brute-force attacks
 const router = express.Router();
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minut
-  // Zwiększamy limit w środowisku deweloperskim.
-  // Increase the limit in the development environment.
-  max: process.env.NODE_ENV === 'production' ? 20 : 100,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+
+// Używamy prawdziwego limitera tylko w produkcji. W dev używamy "pustego" middleware.
+const authLimiter = process.env.NODE_ENV === 'production'
+  ? rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minut
+      max: 20, // Limit dla produkcji
+      message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  : (req, res, next) => next(); // Brak limitu w środowisku deweloperskim
 
 // Rejestracja nowego użytkownika
 // Register a new user
