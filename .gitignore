@@ -1,7 +1,7 @@
 # Zależności - te katalogi są bardzo duże i powinny być instalowane na każdej maszynie osobno.
 /node_modules
 /server/node_modules
-/frontend/node_modules
+
 
 # Pliki build frontendu - generowane automatycznie podczas budowania.
 /frontend/dist
@@ -32,3 +32,7 @@ Thumbs.db
 
 # Zawsze ignoruj katalogi node_modules na każdym poziomie
 node_modules/
+
+# Ignore backend exports — sensitive data
+server/exports/*
+!server/exports/.gitkeep

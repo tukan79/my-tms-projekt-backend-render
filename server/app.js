@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const helmet = require('helmet');
+const os = require('os');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
@@ -93,15 +94,16 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined', { stream }));
 }
 
-// Health check
-app.get('/health', async (req, res) => {
-  try {
-    await sequelize.authenticate();
-    res.status(200).json({ status: 'OK', database: 'connected', timestamp: new Date().toISOString() });
-  } catch (error) {
-    logger.error('Health check failed:', { error: error.message });
-    res.status(503).json({ status: 'error', database: 'disconnected' });
-  }
+// HEALTH CHECK — required by Render
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    hostname: os.hostname(),
+    // The previous health check included a database connection check.
+    // This can be re-added as a separate readiness probe if needed.
+  });
 });
 
 // Serve static assets

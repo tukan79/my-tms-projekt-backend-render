@@ -1,0 +1,15 @@
+# Ignore unnecessary files in Docker build
+node_modules
+npm-debug.log
+Dockerfile
+docker-compose.yml
+.git
+.gitignore
+.eslint*
+*.md
+exports/*
+.env
+.env.*
+tests
+coverage
+logs
