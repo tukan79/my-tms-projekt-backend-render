@@ -65,16 +65,18 @@ app.options('*', cors(corsOptions));
 
 // --- Rate limiters ---
 // Dedicated limiter for auth routes is already applied in routes/authRoutes.js (authLimiter).
-// We set a generous global limiter for API to avoid blocking normal SPA traffic.
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 2000 : 5000, // high for SPA/dev
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
-// Apply global API limiter AFTER CORS and security, but BEFORE routes
-app.use('/api', apiLimiter);
+// Apply rate limiter ONLY in production
+if (process.env.NODE_ENV === 'production') {
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 2000,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.use('/api', apiLimiter);
+}
 
 app.use(hpp());
 
