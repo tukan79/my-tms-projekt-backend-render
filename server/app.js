@@ -42,18 +42,20 @@ app.use(helmet());
 
 // --- Konfiguracja CORS ---
 const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
   process.env.FRONTEND_URL,
-  process.env.CORS_ALLOW_LOCALHOST, // Opcjonalny drugi URL, np. http://127.0.0.1:5173
-].filter(Boolean); // Usuwa puste wartości, jeśli zmienne środowiskowe nie są ustawione
+  'https://my-tms-project-frontend.vercel.app',
+  'https://my-tms-project-frontend-2d9cft3wo-krzysztofs-projects-36780459.vercel.app',
+].filter(Boolean);
 
 const corsOptions = {
-  origin: function (origin, callback) {
+  origin: (origin, callback) => {
     // Zezwalaj na żądania bez 'origin' (np. z Postmana, cURL) oraz te z listy dozwolonych
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Not allowed by CORS for origin: ${origin}`));
+      return callback(null, true);
     }
+    return callback(new Error('CORS blocked: ' + origin));
   },
   credentials: true,
 };
