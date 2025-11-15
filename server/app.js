@@ -6,9 +6,9 @@ const helmet = require('helmet');
 const os = require('os');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const hpp = require('hpp');
+const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger.js');
 
 const authRoutes = require('./routes/authRoutes.js');
@@ -27,34 +27,64 @@ const feedbackRoutes = require('./routes/feedbackRoutes.js');
 const invoiceRoutes = require('./routes/invoiceRoutes.js');
 
 const errorMiddleware = require('./middleware/errorMiddleware.js');
-const { sequelize } = require('./models');
 
 const app = express();
-
 app.set('trust proxy', 1);
 
-// Basic middleware order
+// -------------------------------
+// 🔧 BASIC MIDDLEWARE
+// -------------------------------
 app.use(cookieParser());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 
-app.use(helmet());
+// -------------------------------
+// 🔧 HELMET – FIX FOR VERCEL/REACT
+// -------------------------------
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: false, // required for React on Vercel
+  })
+);
 
-// --- Konfiguracja CORS ---
+// -------------------------------
+// 🔧 STATIC FILES (manifest, icons)
+// Required for frontend to load without 401
+// -------------------------------
+const publicPath = path.join(__dirname, 'public');
+app.use('/manifest.json', (req, res) => {
+  res.sendFile(path.join(publicPath, 'manifest.json'));
+});
+app.use('/favicon.ico', express.static(path.join(publicPath, 'favicon.ico')));
+app.use('/icons', express.static(path.join(publicPath, 'icons')));
+app.use(express.static(publicPath)); // normal static serving
+
+// -------------------------------
+// 🔧 CORS CONFIG
+// Supports dynamic Vercel URLs
+// -------------------------------
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   process.env.FRONTEND_URL,
-  'https://my-tms-project-frontend.vercel.app',
-  'https://my-tms-project-frontend-2d9cft3wo-krzysztofs-projects-36780459.vercel.app',
+  /^https:\/\/.*my-tms-project-frontend.*\.vercel\.app$/,
 ].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Zezwalaj na żądania bez 'origin' (np. z Postmana, cURL) oraz te z listy dozwolonych
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    if (!origin) return callback(null, true); // allow Postman and curl
+
+    const allowed = allowedOrigins.some((o) =>
+      typeof o === 'string'
+        ? o === origin
+        : o instanceof RegExp
+        ? o.test(origin)
+        : false
+    );
+
+    if (allowed) return callback(null, true);
     return callback(new Error('CORS blocked: ' + origin));
   },
   credentials: true,
@@ -63,13 +93,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// --- Rate limiters ---
-// Dedicated limiter for auth routes is already applied in routes/authRoutes.js (authLimiter).
-
-// Apply rate limiter ONLY in production
+// -------------------------------
+// 🔧 RATE LIMITING (only prod)
+// -------------------------------
 if (process.env.NODE_ENV === 'production') {
   const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
+    windowMs: 15 * 60 * 1000,
     max: 2000,
     standardHeaders: true,
     legacyHeaders: false,
@@ -80,36 +109,39 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(hpp());
 
-// No-cache for API
+// -------------------------------
+// 🔧 NO-CACHE FOR API
+// -------------------------------
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
 
-// Logging
+// -------------------------------
+// 🔧 LOGGING
+// -------------------------------
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 } else {
-  const stream = { write: (message) => logger.info(message.trim()) };
+  const stream = { write: (msg) => logger.info(msg.trim()) };
   app.use(morgan('combined', { stream }));
 }
 
-// HEALTH CHECK — required by Render
+// -------------------------------
+// 🔧 HEALTH CHECK (Render required)
+// -------------------------------
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     hostname: os.hostname(),
-    // The previous health check included a database connection check.
-    // This can be re-added as a separate readiness probe if needed.
   });
 });
 
-// Serve static assets
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Mount routes (authRoutes has its own authLimiter for login/register)
+// -------------------------------
+// 🔧 API ROUTES
+// -------------------------------
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/users', userRoutes);
@@ -125,11 +157,25 @@ app.use('/api/surcharge-types', surchargeTypeRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
-// 404 handler
-app.use((req, res, next) => {
+// -------------------------------
+// 🔧 FALLBACK — SPA FRONTEND SUPPORT
+// Must be BEFORE 404
+// -------------------------------
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
+
+// -------------------------------
+// 🔧 404 HANDLER
+// -------------------------------
+app.use((req, res) => {
   res.status(404).json({ error: `Resource not found: ${req.originalUrl}` });
 });
 
+// -------------------------------
+// 🔧 ERROR MIDDLEWARE
+// -------------------------------
 app.use(errorMiddleware);
 
 module.exports = app;
