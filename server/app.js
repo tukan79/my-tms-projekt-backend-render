@@ -42,25 +42,31 @@ app.use(helmet());
 app.use(hpp());
 
 // === CORS KONFIGURACJA ===
+// Definiujemy statyczne, zawsze dozwolone źródła
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL,
-  'https://my-tms-project-frontend.vercel.app',
-  'https://my-tms-project-frontend-7fec58au7-krzysztofs-projects-36780459.vercel.app',
+  process.env.FRONTEND_URL, // Główny URL frontendu z .env
 ].filter(Boolean);
+
+// Wyrażenie regularne do dopasowania wszystkich subdomen Vercel
+const vercelRegex = /^https:\/\/.*-krzysztofs-projects-36780459\.vercel\.app$/;
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    // Zezwalaj na żądania bez 'origin' (np. Postman) oraz te pasujące do naszej listy lub regexa
+    if (!origin || allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
+      callback(null, true);
+    } else {
+      // Zgodnie z dokumentacją `cors`, aby zablokować żądanie, przekazujemy `false`
+      callback(null, false);
     }
-    return callback(new Error('CORS blocked: ' + origin));
   },
   credentials: true,
 };
 
 app.use(cors(corsOptions));
+// Obsługa preflight dla wszystkich tras
 app.options('*', cors(corsOptions));
 
 // === RATE LIMITING ONLY IN PRODUCTION ===

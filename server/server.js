@@ -25,35 +25,6 @@ const userService = require('./services/userService.js');
 const PORT = process.env.PORT || 10000;
 
 // ---------------------------------------------
-//  ⭐ GLOBAL CORS FIX — NAJWAŻNIEJSZA POPRAWKA
-// ---------------------------------------------
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://my-tms-project-frontend.vercel.app",
-  "https://my-tms-project-frontend-o5wrvgim5-krzysztofs-projects-36780459.vercel.app"
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      console.log("CORS request from:", origin);
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("❌ CORS BLOCKED:", origin);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    allowedHeaders: "Content-Type,Authorization",
-    methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-  })
-);
-
-// preflight
-app.options('*', cors());
-
-// ---------------------------------------------
 //  START SERWERA
 // ---------------------------------------------
 let server;
