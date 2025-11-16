@@ -1,13 +1,13 @@
-// Plik server/config/database.js
+// server/config/database.js
 const path = require('path');
 
-// Ładujemy zmienne środowiskowe z pliku .env w katalogu server
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+// Ładujemy dotenv TYLKO lokalnie
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+}
 
 const commonConfig = {
   dialect: 'postgres',
-  // Użyj `snake_case` dla wszystkich automatycznie generowanych nazw (np. kluczy obcych)
-  // To zapewni spójność z nazewnictwem w Twoim pliku init.js
   define: {
     underscored: true,
   },
@@ -22,9 +22,10 @@ module.exports = {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
   },
+
   production: {
     ...commonConfig,
-    use_env_variable: 'DATABASE_URL', // Sequelize-CLI automatycznie użyje tej zmiennej
+    use_env_variable: 'DATABASE_URL',
     dialectOptions: {
       ssl: {
         require: true,
