@@ -1,71 +1,98 @@
-// Plik server/server.js - Główny plik startowy serwera
+// server/server.js
 
-// Warunkowo ładujemy dotenv tylko w środowisku deweloperskim.
-// Na produkcji (np. na Render) zmienne są dostarczane bezpośrednio.
-if (process.env.NODE_ENV !== 'production') { 
+// Ładujemy dotenv w dev
+if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
 
-// DIAGNOSTYKA: Sprawdź zmienne środowiskowe
+// DIAGNOSTYKA
 console.log('🔑 Checking environment variables:');
 console.log('   JWT_SECRET exists:', !!process.env.JWT_SECRET);
 console.log('   JWT_SECRET value:', process.env.JWT_SECRET ? '***SET***' : 'NOT SET');
-console.log('   All env vars:', Object.keys(process.env).filter(key => key.includes('JWT')));
+console.log(
+  '   All env vars:',
+  Object.keys(process.env).filter((key) => key.includes('JWT'))
+);
 
-if (!process.env.JWT_SECRET) {
-  console.error('❌ CRITICAL: JWT_SECRET is not available to the application!');
-}
-
+// IMPORTY
+const express = require('express');
+const cors = require('cors');
 const app = require('./app.js');
-const { sequelize } = require('./models'); // Importujemy instancję Sequelize
-const userService = require('./services/userService.js'); // Importujemy serwis użytkownika
+const { sequelize } = require('./models');
+const userService = require('./services/userService.js');
 
-// Używamy bardziej specyficznej zmiennej, aby uniknąć konfliktów z globalnym `PORT`
-// Na platformach takich jak Render, aplikacja musi nasłuchiwać na porcie zdefiniowanym w zmiennej środowiskowej `PORT`.
-// Używamy `process.env.PORT` dla zgodności z produkcją, a `process.env.API_PORT` jako fallback dla lokalnego rozwoju.
+// PORT
 const PORT = process.env.PORT || process.env.API_PORT || 3000;
 
+// ---------------------------------------------
+//  ⭐ GLOBAL CORS FIX — NAJWAŻNIEJSZA POPRAWKA
+// ---------------------------------------------
+const allowedOrigins = [
+  'https://my-tms-project-frontend.vercel.app',
+  'https://my-tms-project-frontend-o5wrvgim5-krzysztofs-projects-36780459.vercel.app',
+  'http://localhost:5173',
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // np. manifest.json
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.log('❌ BLOCKED ORIGIN:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization',
+  })
+);
+
+// Obsługa preflight – BEZ 401
+app.options('*', cors());
+
+// ---------------------------------------------
+//  START SERWERA
+// ---------------------------------------------
 let server;
 
 const startServer = async () => {
   try {
-    // Krok 1: Sprawdź połączenie z bazą danych przed uruchomieniem serwera
     console.log('🔵 Verifying database connection...');
-    await sequelize.authenticate(); // Używamy metody Sequelize do weryfikacji połączenia
+    await sequelize.authenticate();
     console.log('✅ Database connection has been established successfully.');
 
-    // Krok 1a: Utwórz domyślnego użytkownika-administratora, jeśli nie istnieje.
     await userService.createDefaultAdminUser();
 
-    // Krok 2: Uruchom serwer Express
     server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server is running on port ${PORT} and is accessible from your network.`);
+      console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    // Ulepszona obsługa błędów serwera
     server.on('error', (error) => {
-      if (error.syscall !== 'listen') throw error;
       if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Error: Port ${PORT} is already in use.`);
+        console.error(`❌ Port ${PORT} already in use.`);
         process.exit(1);
       }
+      throw error;
     });
   } catch (error) {
-    console.error('🔥 Failed to start server due to database connection error:', error.message);
+    console.error('🔥 Failed to start server:', error.message);
     process.exit(1);
   }
 };
 
 startServer();
 
-// --- Graceful Shutdown ---
-// Obsługa sygnału SIGTERM, który jest wysyłany przez platformy takie jak Render podczas wdrożeń.
+// ---------------------------------------------
+//  GRACEFUL SHUTDOWN
+// ---------------------------------------------
 const gracefulShutdown = () => {
-  console.log('🟡 SIGTERM signal received: closing HTTP server.');
+  console.log('🟡 SIGTERM received: closing server...');
   server.close(() => {
     console.log('✅ HTTP server closed.');
     sequelize.close().then(() => {
-      console.log('🐘 Sequelize connection has been closed.');
+      console.log('🐘 DB connection closed.');
       process.exit(0);
     });
   });
