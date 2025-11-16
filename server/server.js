@@ -28,28 +28,32 @@ const PORT = process.env.PORT || process.env.API_PORT || 3000;
 //  ⭐ GLOBAL CORS FIX — NAJWAŻNIEJSZA POPRAWKA
 // ---------------------------------------------
 const allowedOrigins = [
-  'https://my-tms-project-frontend.vercel.app',
-  'https://my-tms-project-frontend-o5wrvgim5-krzysztofs-projects-36780459.vercel.app',
   'http://localhost:5173',
+  'https://my-tms-project-frontend.vercel.app',
 ];
+
+// REGEX – pozwalamy na wszystkie subdomeny Vercel
+const vercelRegex = /^https:\/\/.*vercel\.app$/;
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // np. manifest.json
-      if (allowedOrigins.includes(origin)) {
+      if (!origin) return callback(null, true); // manifest.json, health check
+
+      if (allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
         return callback(null, true);
       }
+
       console.log('❌ BLOCKED ORIGIN:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Authorization',
-  })
+  }),
 );
 
-// Obsługa preflight – BEZ 401
+// preflight
 app.options('*', cors());
 
 // ---------------------------------------------
