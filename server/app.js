@@ -31,7 +31,7 @@ const errorMiddleware = require('./middleware/errorMiddleware.js');
 
 const app = express();
 
-// --- TRUST PROXY (wymagane przez Render i cookies) ---
+// --- TRUST PROXY (Render cookies) ---
 app.set('trust proxy', 1);
 
 // === CORE MIDDLEWARE ===
@@ -42,30 +42,41 @@ app.use(helmet());
 app.use(hpp());
 
 // === CORS KONFIGURACJA ===
-// Definiujemy statyczne, zawsze dozwolone źródła
+// ⬅ TWÓJ GŁÓWNY FRONTEND
+const mainFrontend = process.env.FRONTEND_URL;
+
+// ⬅ PEŁNY ADRES TWOJEGO FRONTU DEV VERCEL (ten który używasz)
+const previewFrontend =
+  'https://my-tms-project-frontend-6j712qjzp-krzysztofs-projects-36780459.vercel.app';
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL,
+  mainFrontend,
+  previewFrontend
 ].filter(Boolean);
 
-// Akceptuj WSZYSTKIE subdomeny Vercel
+// Akceptuj WSZYSTKIE subdomeny Vercel (.vercel.app)
 const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
+    if (!origin) return callback(null, true); // np. Postman
+
+    if (
+      allowedOrigins.includes(origin) ||
+      vercelRegex.test(origin)
+    ) {
       return callback(null, true);
     }
+
+    console.log('❌ BLOCKED BY CORS:', origin);
     return callback(null, false);
   },
-  credentials: true,
+  credentials: true, // <- wymagane do refresh tokenów
 };
 
-
 app.use(cors(corsOptions));
-// Obsługa preflight dla wszystkich tras
 app.options('*', cors(corsOptions));
 
 // === RATE LIMITING ONLY IN PRODUCTION ===
@@ -93,7 +104,7 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined', { stream }));
 }
 
-// === HEALTH CHECK REQUIRED BY RENDER ===
+// === HEALTH CHECK (Render) ===
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -103,14 +114,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// === STATIC FILES (OPTIONAL) ===
-// Pozostawiam public/ aby np. serwować favicon lub dokumenty
-const publicPath = path.join(__dirname, 'public');
-app.use(express.static(publicPath));
-
-// 🔥 UWAGA: NIE SERWUJEMY index.html – brak fallbacku !
-// Backend = API ONLY
-// Frontend jest na Vercel – to jest prawidłowe.
+// === STATIC FILES (favicon itp.) ===
+app.use(express.static(path.join(__dirname, 'public')));
 
 // === API ROUTES ===
 app.use('/api/auth', authRoutes);
@@ -129,11 +134,11 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
 // === 404 HANDLER ===
-app.use((req, res) => {
+app.use((req, res) =>
   res.status(404).json({
     error: `Resource not found: ${req.originalUrl}`,
-  });
-});
+  })
+);
 
 // === ERROR HANDLER ===
 app.use(errorMiddleware);
