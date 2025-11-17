@@ -42,45 +42,43 @@ app.use(helmet());
 app.use(hpp());
 
 // === CORS KONFIGURACJA ===
-// ⬅ TWÓJ GŁÓWNY FRONTEND
+
+// produkcyjny frontend (Vercel Production)
 const mainFrontend = process.env.FRONTEND_URL;
 
-// ⬅ PEŁNY ADRES TWOJEGO FRONTU DEV VERCEL (ten który używasz)
-const previewFrontend =
-  'https://my-tms-project-frontend-6j712qjzp-krzysztofs-projects-36780459.vercel.app';
+// dowolna domena .vercel.app — PREVIEW URLs Vercel
+const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
 
+// Wszystkie dopuszczalne domeny
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  "https://my-tms-project-frontend-6j712qjzp-krzysztofs-projects-36780459.vercel.app",
-  mainFrontend,
-  previewFrontend
+  mainFrontend
 ].filter(Boolean);
 
-// Akceptuj WSZYSTKIE subdomeny Vercel (.vercel.app)
-const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
-
+// CORS opcje (działające z cookies)
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // np. Postman
+    // brak origin = Postman / curl
+    if (!origin) return callback(null, true);
 
-    if (
-      allowedOrigins.includes(origin) ||
-      vercelRegex.test(origin)
-    ) {
-      return callback(null, true);
-    }
+    // frontend produkcyjny
+    if (allowedOrigins.includes(origin)) return callback(null, true);
 
+    // wszystkie subdomeny vercel.app
+    if (vercelRegex.test(origin)) return callback(null, true);
+
+    // blokuj resztę
     console.log('❌ BLOCKED BY CORS:', origin);
-    return callback(null, false);
+    return callback(new Error('CORS blocked by server.'), false);
   },
-  credentials: true, // <- wymagane do refresh tokenów
+  credentials: true, // bardzo ważne dla cookies
 };
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// === RATE LIMITING ONLY IN PRODUCTION ===
+// === RATE LIMITING ===
 if (process.env.NODE_ENV === 'production') {
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -105,7 +103,7 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined', { stream }));
 }
 
-// === HEALTH CHECK (Render) ===
+// === HEALTH CHECK ===
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -115,7 +113,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// === STATIC FILES (favicon itp.) ===
+// === STATIC FILES ===
 app.use(express.static(path.join(__dirname, 'public')));
 
 // === API ROUTES ===
