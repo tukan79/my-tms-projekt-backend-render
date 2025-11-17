@@ -52,6 +52,7 @@ const previewFrontend =
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  "https://my-tms-project-frontend-6j712qjzp-krzysztofs-projects-36780459.vercel.app",
   mainFrontend,
   previewFrontend
 ].filter(Boolean);
