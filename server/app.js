@@ -46,24 +46,23 @@ app.use(hpp());
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL, // Główny URL frontendu z .env
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-// Wyrażenie regularne do dopasowania wszystkich subdomen Vercel
-const vercelRegex = /^https:\/\/.*-krzysztofs-projects-36780459\.vercel\.app$/;
+// Akceptuj WSZYSTKIE subdomeny Vercel
+const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Zezwalaj na żądania bez 'origin' (np. Postman) oraz te pasujące do naszej listy lub regexa
-    if (!origin || allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
-      callback(null, true);
-    } else {
-      // Zgodnie z dokumentacją `cors`, aby zablokować żądanie, przekazujemy `false`
-      callback(null, false);
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
+      return callback(null, true);
     }
+    return callback(null, false);
   },
   credentials: true,
 };
+
 
 app.use(cors(corsOptions));
 // Obsługa preflight dla wszystkich tras
