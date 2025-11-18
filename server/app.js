@@ -48,7 +48,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   "https://my-tms-project-frontend.vercel.app",
-  "https://my-tms-project-frontend-f1gmkaoko-krzysztofs-projects-36780459.vercel.app",
+  "https://my-tms-project-frontend-6ft1ez22v-krzysztofs-projects-36780459.vercel.app",
 ];
 
 // CORS opcje (działające z cookies)
