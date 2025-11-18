@@ -43,40 +43,29 @@ app.use(hpp());
 
 // === CORS KONFIGURACJA ===
 
-// produkcyjny frontend (Vercel Production)
-const mainFrontend = process.env.FRONTEND_URL;
-
-// dowolna domena .vercel.app — PREVIEW URLs Vercel
-const vercelRegex = /^https:\/\/.*\.vercel\.app$/;
-
 // Wszystkie dopuszczalne domeny
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  mainFrontend
-].filter(Boolean);
+  "https://my-tms-project-frontend.vercel.app",
+  "https://my-tms-project-frontend-f1gmkaoko-krzysztofs-projects-36780459.vercel.app",
+];
 
 // CORS opcje (działające z cookies)
-const corsOptions = {
-  origin: (origin, callback) => {
-    // brak origin = Postman / curl
-    if (!origin) return callback(null, true);
-
-    // frontend produkcyjny
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-
-    // wszystkie subdomeny vercel.app
-    if (vercelRegex.test(origin)) return callback(null, true);
-
-    // blokuj resztę
-    console.log('❌ BLOCKED BY CORS:', origin);
-    return callback(new Error('CORS blocked by server.'), false);
-  },
-  credentials: true, // bardzo ważne dla cookies
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        // blokuj resztę
+        console.log('❌ BLOCKED BY CORS:', origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // bardzo ważne dla cookies
+  })
+);
 
 // === RATE LIMITING ===
 if (process.env.NODE_ENV === 'production') {
