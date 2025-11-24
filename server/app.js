@@ -1,9 +1,9 @@
 // server/app.js
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
+const path = require('node:path');
 const helmet = require('helmet');
-const os = require('os');
+const os = require('node:os');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
@@ -85,11 +85,11 @@ app.use('/api', (req, res, next) => {
 });
 
 // === LOGGING ===
-if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan('dev'));
-} else {
+if (process.env.NODE_ENV === 'production') {
   const stream = { write: (msg) => logger.info(msg.trim()) };
   app.use(morgan('combined', { stream }));
+} else {
+  app.use(morgan('dev'));
 }
 
 // === HEALTH CHECK ===
