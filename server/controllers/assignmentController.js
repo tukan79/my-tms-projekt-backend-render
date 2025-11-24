@@ -18,10 +18,10 @@ exports.createAssignment = async (req, res, next) => {
       return res.status(400).json({ error: 'Order ID and Run ID are required.' });
     }
 
-    const parsedOrderId = parseInt(order_id, 10);
-    const parsedRunId = parseInt(run_id, 10);
+    const parsedOrderId = Number.parseInt(order_id, 10);
+    const parsedRunId = Number.parseInt(run_id, 10);
 
-    if (isNaN(parsedOrderId) || isNaN(parsedRunId)) {
+    if (Number.isNaN(parsedOrderId) || Number.isNaN(parsedRunId)) {
       return res.status(400).json({ error: 'Order ID and Run ID must be valid numbers.' });
     }
 
@@ -39,9 +39,9 @@ exports.createAssignment = async (req, res, next) => {
 exports.deleteAssignment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const parsedId = parseInt(id, 10);
+    const parsedId = Number.parseInt(id, 10);
 
-    if (isNaN(parsedId)) {
+    if (Number.isNaN(parsedId)) {
       return res.status(400).json({ error: 'Assignment ID must be a valid number.' });
     }
 
@@ -62,13 +62,13 @@ exports.bulkCreateAssignments = async (req, res, next) => {
       return res.status(400).json({ error: 'Run ID and a non-empty array of order IDs are required.' });
     }
 
-    const parsedRunId = parseInt(run_id, 10);
-    if (isNaN(parsedRunId)) {
+    const parsedRunId = Number.parseInt(run_id, 10);
+    if (Number.isNaN(parsedRunId)) {
       return res.status(400).json({ error: 'Run ID must be a valid number.' });
     }
 
-    const parsedOrderIds = order_ids.map(id => parseInt(id, 10));
-    if (parsedOrderIds.some(isNaN)) {
+    const parsedOrderIds = order_ids.map(id => Number.parseInt(id, 10));
+    if (parsedOrderIds.some(Number.isNaN)) {
       return res.status(400).json({ error: 'All order IDs in the array must be valid numbers.' });
     }
 

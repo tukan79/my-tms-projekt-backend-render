@@ -29,7 +29,7 @@ const findRateCardByCustomerId = async (customerId) => {
       include: [{ model: RateCard, as: 'rateCard' }]
     });
 
-    if (!assignment || !assignment.rateCard) {
+    if (!assignment?.rateCard) {
       logService('INFO', context, 'No rate card assignment found for customer', { customerId });
       return null;
     }
@@ -116,12 +116,12 @@ const parsePrice = (priceStr) => {
   if (priceStr === null || priceStr === undefined || priceStr === '') return 0;
 
   // Usuń wszystkie znaki niebędące cyframi, kropkami lub przecinkami
-  const cleanStr = String(priceStr).replace(/[^\d.,-]/g, '');
+  const cleanStr = String(priceStr).replaceAll(/[^\d.,-]/g, '');
 
   // Zamień przecinek na kropkę
-  const numericValue = parseFloat(cleanStr.replace(',', '.'));
+  const numericValue = Number.parseFloat(cleanStr.replace(',', '.'));
 
-  return isNaN(numericValue) ? 0 : numericValue;
+  return Number.isNaN(numericValue) ? 0 : numericValue;
 };
 
 /**
@@ -333,7 +333,7 @@ const assignCustomerToRateCard = async (rateCardId, customerId) => {
   const context = 'assignCustomerToRateCard';
   try {
     logService('INFO', context, 'Assigning customer to rate card', { rateCardId, customerId });
-    const [assignment, created] = await CustomerRateCardAssignment.upsert({
+    const [] = await CustomerRateCardAssignment.upsert({
       customerId,
       rateCardId,
     });

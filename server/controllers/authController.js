@@ -73,7 +73,7 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: 'Nieprawidłowe dane logowania.' });
     }
 
-    const { accessToken, refreshToken } = await authService.generateTokens(user);
+    const { accessToken, refreshToken } = authService.generateTokens(user);
 
     // Zapisz refreshToken w httpOnly cookie
     res.cookie('refreshToken', refreshToken, {
@@ -101,7 +101,7 @@ const login = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     // req.auth jest dodawane przez middleware authenticateToken
-    if (!req.auth || !req.auth.userId) {
+    if (!req.auth?.userId) {
       return res.status(401).json({ error: 'Authentication data not found in token.' });
     }
 

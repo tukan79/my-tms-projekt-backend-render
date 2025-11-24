@@ -1,5 +1,5 @@
 // server/config/database.js
-const path = require('path');
+const path = require('node:path');
 
 // Ładujemy dotenv TYLKO lokalnie
 if (process.env.NODE_ENV !== 'production') {
