@@ -1,76 +1,13 @@
-// server/services/truckService.js
+// server/services/truckService.js (Refactored, SonarQube-friendly)
+
 const { Truck, sequelize } = require('../models');
+const logger = require('../config/logger');
 
-const createTruck = async (truckData) => {
-  const {
-    registration_plate: registrationPlate, brand, model, vin, production_year: productionYear,
-    type_of_truck: typeOfTruck, total_weight: totalWeight, pallet_capacity: palletCapacity, max_payload_kg: maxPayloadKg, is_active: isActive
-  } = truckData;
-
-  try {
-    const newTruck = await Truck.create({
-      registrationPlate: registrationPlate,
-      brand: brand,
-      model: model,
-      vin: vin,
-      productionYear: productionYear,
-      typeOfTruck: typeOfTruck,
-      totalWeight: totalWeight,
-      palletCapacity: palletCapacity,
-      maxPayloadKg: maxPayloadKg,
-      isActive: isActive,
-    });
-    return newTruck;
-  } catch (error) {
-    throw error;
-  }
-};
-
-const findTrucksByCompany = async () => {
-  // `paranoid: true` w modelu automatycznie dodaje warunek `is_deleted = FALSE`
-  return Truck.findAll({
-    order: [['brand', 'ASC'], ['model', 'ASC']],
-  });
-};
-
-const updateTruck = async (truckId, truckData) => {
-  const {
-    registration_plate: registrationPlate, brand, model, vin, production_year: productionYear,
-    type_of_truck: typeOfTruck, total_weight: totalWeight, pallet_capacity: palletCapacity, max_payload_kg: maxPayloadKg, is_active: isActive
-  } = truckData;
-
-  const dataToUpdate = {
-    registrationPlate: registrationPlate,
-    brand: brand,
-    model: model,
-    vin: vin,
-    productionYear: productionYear,
-    typeOfTruck: typeOfTruck,
-    totalWeight: totalWeight,
-    palletCapacity: palletCapacity,
-    maxPayloadKg: maxPayloadKg,
-    isActive: isActive,
-  };
-
-  const [updatedRowsCount, updatedTrucks] = await Truck.update(
-    dataToUpdate,
-    {
-      where: { id: truckId },
-      returning: true,
-    }
-  );
-
-  return updatedRowsCount > 0 ? updatedTrucks[0] : null;
-};
-
-const deleteTruck = async (truckId) => {
-  // `destroy` z `paranoid: true` w modelu wykona soft delete
-  return Truck.destroy({ where: { id: truckId } });
-};
+// --- Helpers -----------------------------------------------------
 
 const toInt = (value) => {
-  const num = parseInt(value, 10);
-  return isNaN(num) ? null : num;
+  const num = Number.parseInt(value, 10);
+  return Number.isNaN(num) ? null : num;
 };
 
 const toBoolean = (value) => {
@@ -81,39 +18,108 @@ const toBoolean = (value) => {
   return Boolean(value);
 };
 
+// --- Normalizing Input ------------------------------------------
+
+function normalizeTruckData(data) {
+  return {
+    registrationPlate: data.registration_plate,
+    brand: data.brand,
+    model: data.model || '',
+    vin: data.vin || null,
+    productionYear: toInt(data.production_year),
+    typeOfTruck: data.type_of_truck?.toLowerCase() === 'rigid' ? 'rigid' : 'tractor',
+    totalWeight: toInt(data.total_weight),
+    palletCapacity: toInt(data.pallet_capacity),
+    maxPayloadKg: toInt(data.max_payload_kg),
+    isActive: toBoolean(data.is_active),
+  };
+}
+
+// --- CRUD Services ----------------------------------------------
+
+const createTruck = async (truckData) => {
+  const payload = normalizeTruckData(truckData);
+
+  try {
+    const newTruck = await Truck.create(payload);
+    return newTruck;
+  } catch (error) {
+    logger.error('Error creating truck', { error: error.message, payload });
+    throw error;
+  }
+};
+
+const findTrucksByCompany = async () => {
+  return Truck.findAll({
+    order: [ ['brand', 'ASC'], ['model', 'ASC'] ],
+  });
+};
+
+const updateTruck = async (truckId, truckData) => {
+  const dataToUpdate = normalizeTruckData(truckData);
+
+  try {
+    const [updatedRowsCount, updatedTrucks] = await Truck.update(
+      dataToUpdate,
+      {
+        where: { id: truckId },
+        returning: true,
+      }
+    );
+
+    return updatedRowsCount > 0 ? updatedTrucks[0] : null;
+  } catch (error) {
+    logger.error(`Error updating truck ID ${truckId}`, {
+      error: error.message,
+      truckId,
+      dataToUpdate,
+    });
+    throw error;
+  }
+};
+
+const deleteTruck = async (truckId) => {
+  try {
+    return await Truck.destroy({ where: { id: truckId } }); // Soft delete (paranoid)
+  } catch (error) {
+    logger.error(`Error deleting truck ID ${truckId}`, { error: error.message });
+    throw error;
+  }
+};
+
+// --- Import Trucks ----------------------------------------------
+
 const importTrucks = async (trucksData) => {
   return sequelize.transaction(async (t) => {
-    const trucksToCreateOrUpdate = [];
-
-    for (const truck of trucksData) {
-      if (!truck.registration_plate) continue; // Pomiń wiersze bez numeru rejestracyjnego
-
-      trucksToCreateOrUpdate.push({
-        registrationPlate: truck.registration_plate,
-        brand: truck.brand,
-        model: truck.model || '',
-        vin: truck.vin || null,
-        productionYear: toInt(truck.production_year),
-        typeOfTruck: truck.type_of_truck?.toLowerCase() === 'rigid' ? 'rigid' : 'tractor',
-        totalWeight: toInt(truck.total_weight),
-        palletCapacity: toInt(truck.pallet_capacity),
-        maxPayloadKg: toInt(truck.max_payload_kg),
-        isActive: toBoolean(truck.is_active),
-      });
-    }
+    const trucksToCreateOrUpdate = trucksData
+      .filter(truck => truck.registration_plate)
+      .map(truck => normalizeTruckData(truck));
 
     if (trucksToCreateOrUpdate.length === 0) {
       return { importedCount: 0, importedIds: [] };
     }
 
-    const importedTrucks = await Truck.bulkCreate(trucksToCreateOrUpdate, {
-      transaction: t,
-      updateOnDuplicate: ['brand', 'model', 'vin', 'productionYear', 'typeOfTruck', 'totalWeight', 'palletCapacity', 'maxPayloadKg', 'isActive'],
-    });
+    try {
+      const importedTrucks = await Truck.bulkCreate(trucksToCreateOrUpdate, {
+        transaction: t,
+        updateOnDuplicate: [
+          'brand', 'model', 'vin', 'productionYear', 'typeOfTruck',
+          'totalWeight', 'palletCapacity', 'maxPayloadKg', 'isActive'
+        ],
+      });
 
-    return { importedCount: importedTrucks.length, importedIds: importedTrucks.map(t => t.id) };
+      return {
+        importedCount: importedTrucks.length,
+        importedIds: importedTrucks.map(t => t.id)
+      };
+    } catch (error) {
+      logger.error('Error importing trucks', { error: error.message });
+      throw error;
+    }
   });
 };
+
+// --- Exports -----------------------------------------------------
 
 module.exports = {
   createTruck,

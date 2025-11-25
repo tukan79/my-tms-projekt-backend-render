@@ -109,11 +109,11 @@ const updateOrder = async (orderId, orderData) => {
     const mergedOrderData = {
       ...existingOrder.get({ plain: true }), // Pobierz czysty obiekt z istniejącego zlecenia
       // Użyj zmapowanych danych camelCase
-      ...{
+      
         customerId, orderNumber, serviceLevel, customerReference, status, senderDetails,
         recipientDetails, cargoDetails, loadingDateTime, unloadingDateTime, selectedSurcharges,
         unloadingStartTime, unloadingEndTime, finalPrice
-      }
+      
     };
 
     // Krok 3: Sprawdź, czy należy przeliczyć cenę.
@@ -153,11 +153,11 @@ const updateOrder = async (orderId, orderData) => {
     if (priceResult && priceResult.calculatedPrice > 0) {
       const hasManualPriceOverride = 'final_price' in orderData &&
                                      orderData.final_price !== '' &&
-                                     parseFloat(orderData.final_price) !== priceResult.finalPrice;
+                                     Number.parseFloat(orderData.final_price) !== priceResult.finalPrice;
 
       if (hasManualPriceOverride) {
         finalCalculatedPrice = priceResult.calculatedPrice;
-        finalFinalPrice = parseFloat(orderData.final_price);
+        finalFinalPrice = Number.parseFloat(orderData.final_price);
       } else {
         finalCalculatedPrice = priceResult.calculatedPrice;
         finalFinalPrice = priceResult.finalPrice;

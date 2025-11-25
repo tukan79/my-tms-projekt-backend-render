@@ -25,7 +25,7 @@ const getNextInvoiceNumber = async (transaction) => {
     return `${prefix}1`;
   }
 
-  const lastNumber = parseInt(lastInvoice.invoiceNumber.split('/').pop(), 10);
+  const lastNumber = Number.parseInt(lastInvoice.invoiceNumber.split('/').pop(), 10);
   return `${prefix}${lastNumber + 1}`;
 };
 

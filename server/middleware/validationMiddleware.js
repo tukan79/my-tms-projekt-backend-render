@@ -40,7 +40,7 @@ exports.validateUserCreation = [
     .custom(async (value) => {
       const user = await User.findOne({ where: { email: value } });
       if (user) {
-        return Promise.reject('E-mail already in use.');
+        return'E-mail already in use.';
       }
     }),
   body('first_name').notEmpty().withMessage('First name is required.').trim().escape(),

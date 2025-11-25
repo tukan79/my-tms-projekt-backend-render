@@ -87,7 +87,7 @@ const generateInvoicePDF = async (invoiceId) => {
       doc.text(item.order.orderNumber || 'N/A', itemX, y);
       doc.text(new Date(item.order.unloadingDateTime).toLocaleDateString(), dateX, y);
       doc.text(item.order.customerReference || 'N/A', refX, y);
-      doc.text(`£${parseFloat(item.amount).toFixed(2)}`, amountX, y, { align: 'right' });
+      doc.text(`£${Number.parseFloat(item.amount).toFixed(2)}`, amountX, y, { align: 'right' });
       doc.moveDown();
     });
 

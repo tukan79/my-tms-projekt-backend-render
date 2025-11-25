@@ -84,7 +84,7 @@ const importCustomers = async (customersData) => {
         currency: customerData.currency || 'GBP',
         status: customerData.status || 'active',
         vatNumber: customerData.vat_number || null,
-        paymentTerms: customerData.payment_terms ? parseInt(customerData.payment_terms, 10) : 14,
+        paymentTerms: customerData.payment_terms ? Number.parseInt(customerData.payment_terms, 10) : 14,
         podOnPortal: toBoolean(customerData.pod_on_portal || false),
         invoiceOnPortal: toBoolean(customerData.invoice_on_portal || false),
         handheldStatusOnPortal: toBoolean(customerData.handheld_status_on_portal || false),

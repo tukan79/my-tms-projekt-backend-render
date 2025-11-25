@@ -1,8 +1,8 @@
 // Plik server/controllers/trailerController.js
 const trailerService = require('../services/trailerService.js'); // Użyjemy serwisu
 const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 exports.getAllTrailers = async (req, res, next) => {
   try {
@@ -18,7 +18,7 @@ exports.exportTrailers = async (req, res, next) => {
     const trailers = await trailerService.findTrailersByCompany();
     const csv = Papa.unparse(trailers.map(t => t.get({ plain: true }))); // Używamy get({ plain: true })
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filename = `trailers_${timestamp}.csv`;
     const exportsDir = path.join(__dirname, '../exports');
 
