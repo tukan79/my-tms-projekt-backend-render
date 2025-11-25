@@ -1,8 +1,8 @@
 // Plik server/controllers/customerController.js
 const customerService = require('../services/customerService.js');
 const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 exports.getAllCustomers = async (req, res, next) => {
   try {
@@ -18,7 +18,7 @@ exports.exportCustomers = async (req, res, next) => {
     const customers = await customerService.findAllCustomers();
     const csv = Papa.unparse(customers.map(c => c.get({ plain: true }))); // Używamy get({ plain: true })
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filename = `customers_${timestamp}.csv`;
     const exportsDir = path.join(__dirname, '../exports');
 

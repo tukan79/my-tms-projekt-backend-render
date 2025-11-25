@@ -25,7 +25,7 @@ const getAllUsers = async (req, res, next) => {
 const createUser = async (req, res, next) => {
   try {
     // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const { email, password, role, first_name, last_name } = req.body;
+    const { email, role, first_name, last_name } = req.body;
     const newUser = await userService.createUser({
       email,
       password: req.body.password,
@@ -113,7 +113,7 @@ const exportUsers = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     // req.auth jest dodawane przez middleware authenticateToken
-    if (!req.auth || !req.auth.userId) {
+    if (!req.auth?.userId) {
       return res.status(401).json({ error: 'Authentication data not found.' });
     }
 

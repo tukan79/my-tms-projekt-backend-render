@@ -15,6 +15,7 @@ const logService = (level, context, message, data = null) => {
   }
   console.log(JSON.stringify(logEntry, null, 2));
 };
+
 /**
  * Finds the rate card assigned to a specific customer.
  * @param {number} customerId - The ID of the customer.
@@ -79,8 +80,7 @@ const createRateCard = async ({ name }) => {
   }
 };
 
-const updateRateCard = async (id, { name, price }) => {
-  // Uwaga: pole 'price' nie istnieje w tabeli 'rate_cards', więc zostało zignorowane.
+const updateRateCard = async (id, { name }) => {
   const context = 'updateRateCard';
   try {
     logService('INFO', context, 'Updating rate card', { id, updates: { name } });
@@ -115,10 +115,7 @@ const updateRateCard = async (id, { name, price }) => {
 const parsePrice = (priceStr) => {
   if (priceStr === null || priceStr === undefined || priceStr === '') return 0;
 
-  // Usuń wszystkie znaki niebędące cyframi, kropkami lub przecinkami
   const cleanStr = String(priceStr).replaceAll(/[^\d.,-]/g, '');
-
-  // Zamień przecinek na kropkę
   const numericValue = Number.parseFloat(cleanStr.replace(',', '.'));
 
   return Number.isNaN(numericValue) ? 0 : numericValue;
@@ -131,13 +128,14 @@ const parsePrice = (priceStr) => {
  * @returns {any|undefined} The value of the first found key, or undefined.
  */
 const findValueByKeys = (obj, keys) => {
-  for (const key of keys) if (obj[key] !== undefined) return obj[key];
+  for (const key of keys) {
+    if (obj[key] !== undefined) return obj[key];
+  }
 };
 
 const importRateEntries = async (rateCardId, entries) => {
   const context = 'importRateEntries';
   
-  // Walidacja wejścia
   if (!rateCardId || !entries || !Array.isArray(entries)) {
     throw new Error('Invalid input: rateCardId and entries array are required');
   }
@@ -154,64 +152,44 @@ const importRateEntries = async (rateCardId, entries) => {
         totalEntries: entries.length 
       });
 
-      // Pobierz wszystkie strefy
-      logService('DEBUG', context, 'Fetching zones from database');
       const zones = await PostcodeZone.findAll({
         attributes: ['id', 'zoneName'],
         transaction: t
       });
-      logService('DEBUG', context, `Retrieved ${zones.length} zones from database`);
 
-      // Tworzymy mapowanie nazw stref na ID - POPRAWIONE MAPOWANIE
       const zoneMap = new Map();
-      // Uproszczone i bardziej niezawodne mapowanie: konwertujemy nazwy na małe litery i usuwamy białe znaki.
       zones.forEach(zone => {
         zoneMap.set(String(zone.zone_name).trim().toLowerCase(), zone.id);
       });
 
-      logService('DEBUG', context, 'Zone mapping created', { 
-        zoneMapSize: zoneMap.size,
-        sampleMappings: Array.from(zoneMap.entries()).slice(0, 10).map(([key, value]) => `${key} -> ${value}`)
-      });
-
       let skippedCount = 0;
       const errors = [];
-      const processedKeys = new Set(); // Zestaw do śledzenia unikalnych kluczy
+      const processedKeys = new Set();
       const entriesToCreate = [];
 
       for (const [index, entry] of entries.entries()) {
         try {
-          // Mapowanie nazw kolumn z CSV na nasze pola
-          // Używamy tej samej logiki normalizacji, co przy tworzeniu mapy.
           const zoneNameFromCSV = String(entry['Zone Name'] || '').trim().toLowerCase();
           const zoneId = zoneMap.get(zoneNameFromCSV);
 
           if (!zoneId) {
-            const errorMsg = `Zone "${entry['Zone Name']}" not found in database. Available zones: ${Array.from(zoneMap.keys()).slice(0, 10).join(', ')}...`;
+            const errorMsg = `Zone "${entry['Zone Name']}" not found in database.`;
             errors.push(errorMsg);
             skippedCount++;
             continue;
           }
 
-          logService('DEBUG', context, `Processing entry ${index}`, {
-            zoneName: zoneNameFromCSV,
-            zoneId,
-            rateType: entry['Rate Type'],
-            serviceLevel: entry['Service Level']
-          });
-
           let rateType = (entry['Rate Type'] || 'delivery').trim().toLowerCase();
-          if (rateType === 'standart' || rateType === 'standard') { // Poprawka: Obsługa błędnej pisowni "Standart"
+          if (rateType === 'standart' || rateType === 'standard') {
             rateType = 'delivery';
           } else if (rateType !== 'collection') {
-            rateType = 'delivery'; // Domyślnie ustawiamy na 'delivery', jeśli wartość jest nieznana lub inna
+            rateType = 'delivery';
           }
 
-          const serviceLevel = entry['Service Level'] || 'A'; // Pobieramy serviceLevel z wpisu
-          // Klucz unikalności dla wpisu
+          const serviceLevel = entry['Service Level'] || 'A';
           const uniqueKey = `${zoneId}-${serviceLevel}-${rateType}`;
+
           if (processedKeys.has(uniqueKey)) {
-            logService('WARN', context, `Skipping duplicate entry in CSV file for key: ${uniqueKey}`, { index });
             skippedCount++;
             continue;
           }
@@ -237,16 +215,17 @@ const importRateEntries = async (rateCardId, entries) => {
             priceFull10: parsePrice(findValueByKeys(entry, ['Price Full 10', 'price_full_10'])),
           });
 
-          processedKeys.add(uniqueKey); // Dodaj klucz do przetworzonych
+          processedKeys.add(uniqueKey);
+
         } catch (entryError) {
-          const errorMsg = `Error processing entry ${index} for zone ${entry['Zone Name']}: ${entryError.message}`;
+          const errorMsg = `Error processing entry ${index}: ${entryError.message}`;
           errors.push(errorMsg);
           skippedCount++;
-          logService('ERROR', context, errorMsg);
         }
       }
 
       let processedCount = 0;
+
       if (entriesToCreate.length > 0) {
         const createdEntries = await RateEntry.bulkCreate(entriesToCreate, {
           transaction: t,
@@ -259,34 +238,15 @@ const importRateEntries = async (rateCardId, entries) => {
         processedCount = createdEntries.length;
       }
 
-      // Logowanie podsumowania
-      logService('INFO', context, 'Import transaction completed', {
-        rateCardId,
-        processed: processedCount,
-        skipped: skippedCount,
-        totalErrors: errors.length
-      });
-
-      if (errors.length > 0) {
-        logService('WARN', context, 'Import completed with errors', {
-          rateCardId,
-          firstErrors: errors.slice(0, 5)
-        });
-      }
-
       return { 
         count: processedCount, 
         skipped: skippedCount,
         errors: errors.length > 0 ? errors.slice(0, 10) : undefined
       };
     } catch (error) {
-      logService('ERROR', context, 'Transaction failed', { 
-        rateCardId, 
-        error: error.message, 
-        stack: error.stack 
-      });
+      logService('ERROR', context, 'Error message here', { error: error.message });
       throw error;
-    }
+}
   });
 };
 
@@ -298,7 +258,7 @@ const findEntriesByRateCardId = async (rateCardId) => {
       where: { rateCardId },
       include: [{ model: PostcodeZone, as: 'zone', attributes: ['zoneName'] }],
       order: [['zoneId', 'ASC'], ['serviceLevel', 'ASC']],
-      raw: true, // Zwraca czyste obiekty JS
+      raw: true,
     });
     logService('INFO', context, 'Found rate entries', { rateCardId, count: entries.length });
     return entries;
@@ -317,7 +277,7 @@ const findCustomersByRateCardId = async (rateCardId) => {
         model: CustomerRateCardAssignment,
         as: 'rateCardAssignment',
         where: { rateCardId },
-        required: true, // Działa jak INNER JOIN
+        required: true,
       }],
       order: [['name', 'ASC']],
     });
@@ -333,13 +293,15 @@ const assignCustomerToRateCard = async (rateCardId, customerId) => {
   const context = 'assignCustomerToRateCard';
   try {
     logService('INFO', context, 'Assigning customer to rate card', { rateCardId, customerId });
-    const [] = await CustomerRateCardAssignment.upsert({
+
+    // FIXED: removed invalid empty destructuring
+    await CustomerRateCardAssignment.upsert({
       customerId,
       rateCardId,
     });
+
     logService('INFO', context, 'Successfully assigned customer to rate card', { rateCardId, customerId });
-    // `upsert` w Sequelize nie zwraca obiektu w taki sam sposób jak `RETURNING *`
-    // Zwracamy dane, które próbowaliśmy wstawić/zaktualizować
+
     return { customerId, rateCardId };
   } catch (error) {
     logService('ERROR', context, 'Error assigning customer to rate card', { rateCardId, customerId, error: error.message });
@@ -375,7 +337,6 @@ const assignCustomersToRateCardBulk = async (rateCardId, customerIds) => {
   return sequelize.transaction(async (t) => {
     const assignments = customerIds.map(customerId => ({ customerId, rateCardId }));
     
-    // `bulkCreate` z `updateOnDuplicate` działa jak `upsert` dla wielu rekordów
     const results = await CustomerRateCardAssignment.bulkCreate(assignments, {
       transaction: t,
       updateOnDuplicate: ['rateCardId'],
@@ -387,7 +348,6 @@ const assignCustomersToRateCardBulk = async (rateCardId, customerIds) => {
   });
 };
 
-// Dodatkowa funkcja do sprawdzenia struktury stref w bazie
 const getZoneMappingInfo = async () => {
   const context = 'getZoneMappingInfo';
   try {
@@ -404,7 +364,6 @@ const getZoneMappingInfo = async () => {
   }
 };
 
-// Funkcja do debugowania - sprawdź jakie strefy są dostępne
 const debugZoneMapping = async () => {
   const context = 'debugZoneMapping';
   try {
