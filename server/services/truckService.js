@@ -24,7 +24,7 @@ function normalizeTruckData(data) {
   return {
     registrationPlate: data.registration_plate,
     brand: data.brand,
-    model: data.model || '',
+    model: data.model || null,
     vin: data.vin || null,
     productionYear: toInt(data.production_year),
     typeOfTruck: data.type_of_truck?.toLowerCase() === 'rigid' ? 'rigid' : 'tractor',
@@ -49,10 +49,15 @@ const createTruck = async (truckData) => {
   }
 };
 
-const findTrucksByCompany = async () => {
-  return Truck.findAll({
-    order: [ ['brand', 'ASC'], ['model', 'ASC'] ],
-  });
+const findAllTrucks = async () => {
+  try {
+    return await Truck.findAll({
+      order: [ ['brand', 'ASC'], ['model', 'ASC'] ],
+    });
+  } catch (error) {
+    logger.error('Error finding all trucks', { error: error.message });
+    throw error;
+  }
 };
 
 const updateTruck = async (truckId, truckData) => {
@@ -123,7 +128,7 @@ const importTrucks = async (trucksData) => {
 
 module.exports = {
   createTruck,
-  findTrucksByCompany,
+  findAllTrucks,
   updateTruck,
   deleteTruck,
   importTrucks,

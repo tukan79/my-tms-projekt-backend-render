@@ -59,8 +59,8 @@ app.use(
         callback(null, true);
       } else {
         // blokuj resztę
-        console.log('❌ BLOCKED BY CORS:', origin);
-        callback(new Error("Not allowed by CORS"));
+        logger.warn(`CORS blocked request from origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
       }
     },
     credentials: true, // bardzo ważne dla cookies
@@ -68,15 +68,24 @@ app.use(
 );
 
 // === RATE LIMITING ===
-if (process.env.NODE_ENV === 'production') {
-  const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 2000,
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use('/api', apiLimiter);
-}
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minut
+  max: process.env.NODE_ENV === 'production' ? 1000 : 5000, // Mniej w produkcji
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
+
+// Bardziej restrykcyjny limiter dla endpointów autoryzacji
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minut
+  max: process.env.NODE_ENV === 'production' ? 20 : 100,
+  message: { error: 'Too many authentication attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth', authLimiter);
 
 // === NO CACHE FOR API ===
 app.use('/api', (req, res, next) => {

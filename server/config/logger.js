@@ -34,15 +34,15 @@ const logger = createLogger({
 
 // W środowisku produkcyjnym dodajemy transport do plików
 if (process.env.NODE_ENV === 'production') {
-  logger.add(new transports.File({ 
-    filename: 'logs/error.log', 
+  logger.add(new transports.File({
+    filename: 'logs/error.log',
     level: 'error',
     format: combine(timestamp(), format.errors({ stack: true }), logFormat),
   }));
-  logger.add(new transports.File({ 
+  logger.add(new transports.File({
     filename: 'logs/combined.log',
     format: combine(timestamp(), format.errors({ stack: true }), logFormat),
-  }));
+  }));  
 }
 
 module.exports = logger;

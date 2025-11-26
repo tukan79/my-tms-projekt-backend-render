@@ -23,13 +23,23 @@ module.exports = {
     port: process.env.DB_PORT || 5432,
   },
 
+  test: {
+    ...commonConfig,
+    username: process.env.DB_USER_TEST || 'postgres',
+    password: process.env.DB_PASSWORD_TEST || 'password',
+    database: process.env.DB_NAME_TEST || 'tms_test',
+    host: process.env.DB_HOST_TEST || 'localhost',
+    port: process.env.DB_PORT_TEST || 5432,
+    logging: false, // Wyłącz logowanie zapytań SQL podczas testów
+  },
+
   production: {
     ...commonConfig,
     use_env_variable: 'DATABASE_URL',
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false,
+        rejectUnauthorized: false, // Wymagane przez niektóre platformy hostingowe (np. Render, Heroku)
       },
     },
   },

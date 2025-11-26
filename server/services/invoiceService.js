@@ -1,9 +1,15 @@
 // Plik: server/services/invoiceService.js
 const { Invoice, Order, InvoiceItem, Customer, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const logger = require('../config/logger');
+
+// --- Konfiguracja ---
+const DUE_DATE_DAYS = 14; // Domyślny termin płatności w dniach
+const INITIAL_INVOICE_STATUS = 'unpaid';
 
 /**
  * Generuje następny numer faktury w formacie ROK/MIESIĄC/NUMER.
+ * Ta funkcja jest podatna na "race condition" przy bardzo wysokim obciążeniu.
  * @param {import('sequelize').Transaction} transaction - Opcjonalna transakcja Sequelize.
  * @returns {Promise<string>} Nowy numer faktury.
  */
@@ -37,6 +43,8 @@ const getNextInvoiceNumber = async (transaction) => {
  * @returns {Promise<object>} Nowo utworzona faktura.
  */
 const createInvoice = async (customerId, startDateStr, endDateStr) => {
+  logger.info(`Attempting to create invoice for customerId: ${customerId} from ${startDateStr} to ${endDateStr}`);
+
   return sequelize.transaction(async (t) => {
     // 1. Znajdź wszystkie niezapłacone zlecenia dla klienta w danym okresie.
     const ordersToInvoice = await Order.findAll({
@@ -52,16 +60,17 @@ const createInvoice = async (customerId, startDateStr, endDateStr) => {
     });
     
     if (ordersToInvoice.length === 0) {
+      logger.warn(`No uninvoiced orders found for customerId: ${customerId} in the selected date range.`);
       throw new Error('No uninvoiced orders found for the selected customer and date range.');
     }
 
     // 2. Oblicz sumę i przygotuj pozycje faktury.
-    const totalAmount = ordersToInvoice.reduce((sum, order) => sum + parseFloat(order.finalPrice || 0), 0);
+    const totalAmount = ordersToInvoice.reduce((sum, order) => sum + Number(order.finalPrice || 0), 0);
 
     // 3. Wygeneruj numer faktury i datę płatności.
     const invoiceNumber = await getNextInvoiceNumber(t);
     const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 14); // Przykładowy termin płatności: 14 dni
+    dueDate.setDate(dueDate.getDate() + DUE_DATE_DAYS);
 
     // 4. Wstaw nową fakturę do tabeli `invoices`.
     const newInvoice = await Invoice.create({
@@ -70,7 +79,7 @@ const createInvoice = async (customerId, startDateStr, endDateStr) => {
       issueDate: new Date(),
       dueDate: dueDate.toISOString().split('T')[0],
       totalAmount: totalAmount.toFixed(2),
-      status: 'unpaid',
+      status: INITIAL_INVOICE_STATUS,
     }, { transaction: t });
 
     // 5. Wstaw pozycje faktury i zaktualizuj zlecenia.
@@ -90,22 +99,30 @@ const createInvoice = async (customerId, startDateStr, endDateStr) => {
       { where: { id: { [Op.in]: orderIds } }, transaction: t }
     );
 
+    logger.info(`Successfully created invoice ${newInvoice.invoiceNumber} (ID: ${newInvoice.id}) with ${ordersToInvoice.length} items.`);
     return newInvoice;
   });
 };
 
 const findAllInvoices = async () => {
-  return Invoice.findAll({
-    include: [{
-      model: Customer,
-      as: 'customer',
-      attributes: ['name'],
-    }],
-    order: [['issueDate', 'DESC'], ['id', 'DESC']],
-  });
+  try {
+    return await Invoice.findAll({
+      include: [{
+        model: Customer,
+        as: 'customer',
+        attributes: ['name'],
+      }],
+      order: [['issueDate', 'DESC'], ['id', 'DESC']],
+    });
+  } catch (error) {
+    logger.error('Error finding all invoices', { error: error.message });
+    throw error;
+  }
 };
 
 module.exports = {
   createInvoice,
   findAllInvoices,
+  // Eksportujemy na potrzeby testów lub innych serwisów
+  getNextInvoiceNumber, 
 };
