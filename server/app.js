@@ -47,18 +47,19 @@ app.use(hpp());
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  "https://my-tms-project-frontend.vercel.app",
-  "https://my-tms-project-frontend-6ft1ez22v-krzysztofs-projects-36780459.vercel.app",
+  'https://my-tms-project-frontend.vercel.app', // Twoja domena Vercel
+  'https://my-tms-project-frontend.onrender.com', // Nowa domena na Render
 ];
 
 // CORS opcje (działające z cookies)
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Zezwalaj na żądania bez 'origin' (np. z Postmana, testów serwerowych)
+      // LUB gdy 'origin' jest na liście dozwolonych
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        // blokuj resztę
         logger.warn(`CORS blocked request from origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
