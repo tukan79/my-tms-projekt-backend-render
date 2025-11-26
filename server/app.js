@@ -48,7 +48,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'https://my-tms-project-frontend.vercel.app', // Twoja domena Vercel
-  'https://my-tms-project-frontend.onrender.com', // Nowa domena na Render
+  'https://my-tms-projekt-frontend.onrender.com', // Nowa domena na Render
 ];
 
 // CORS opcje (działające z cookies)
