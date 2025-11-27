@@ -21,7 +21,7 @@ app.use(compression());
 // -----------------------------------
 const FRONTEND =
   process.env.NODE_ENV === "production"
-    ? "https://my-tms-project-frontend.onrender.com"
+    ? "https://my-tms-projekt-frontend.onrender.com"
     : "http://localhost:5173";
 
 app.use(
