@@ -5,21 +5,20 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
 const hpp = require('hpp');
-const path = require('path');
 
 const app = express();
 
-// =========================
-// 1) COOKIE PARSER + JSON
-// =========================
+// -----------------------------------
+// 1) PARSERY I KOMPR
+// -----------------------------------
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// =========================
-// 2) CORS – MUSI BYĆ PIERWSZY
-// =========================
+// -----------------------------------
+// 2) CORS (MUSI BYĆ PRZED HELMET!)
+// -----------------------------------
 const FRONTEND =
   process.env.NODE_ENV === "production"
     ? "https://my-tms-project-frontend.onrender.com"
@@ -30,14 +29,13 @@ app.use(
     origin: FRONTEND,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
   })
 );
 
-// =========================
-// 3) HELMET — z WYŁĄCZONYMI
-//    politykami cross-origin
-// =========================
+// -----------------------------------
+// 3) HELMET
+// -----------------------------------
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -46,28 +44,24 @@ app.use(
   })
 );
 
-// =========================
-// 4) Ochrona HPP
-// =========================
+// -----------------------------------
+// 4) HPP
+// -----------------------------------
 app.use(hpp());
 
-// =========================
-// 5) ROUTES
-// =========================
+// -----------------------------------
+// 5) HEALTH CHECK
+// -----------------------------------
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+// -----------------------------------
+// 6) ROUTES
+// -----------------------------------
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/runs", require("./routes/runRoutes"));
 app.use("/api/surcharge-types", require("./routes/surchargeTypeRoutes"));
-app.use("/api/customers", require("./routes/customerRoutes"));
-// ... Twoje inne trasy
-
-// =========================
-// 6) STATIC FILES (PROD)
-// =========================
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../public")));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../public", "index.html"));
-  });
-}
+// ...reszta Twoich tras
 
 module.exports = app;
