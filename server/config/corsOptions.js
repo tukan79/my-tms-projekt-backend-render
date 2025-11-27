@@ -2,7 +2,7 @@
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://my-tms-projekt-frontend.onrender.com", 
+  "https://my-tms-projekt-frontend.onrender.com", //
 ];
 
 app.use(cors({
