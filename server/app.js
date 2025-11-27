@@ -9,70 +9,48 @@ const hpp = require('hpp');
 
 const app = express();
 
-// -----------------------------------
-// 1) PARSERY I KOMPR
-// -----------------------------------
+// 1) Parsowanie
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// -----------------------------------
-// 2) CORS (MUSI BYĆ PRZED HELMET!)
-// -----------------------------------
+// 2) CORS — najważniejsze!
+const FRONTEND =
+  process.env.NODE_ENV === "production"
+    ? "https://my-tms-projekt-frontend.onrender.com"
+    : "http://localhost:5173";
 
-// 👉 DWA FRONTENDY — localhost + produkcyjny
-const ALLOWED_ORIGINS = [
-  "http://localhost:5173",
-  "https://my-tms-projekt-frontend.onrender.com",
-];
+console.log("🌐 CORS ALLOW ORIGIN =", FRONTEND);
+console.log("🌐 NODE_ENV =", process.env.NODE_ENV);
 
-// pozwalamy tylko jeśli origin jest na liście
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("🚫 BLOCKED CORS ORIGIN:", origin);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: FRONTEND,
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-// -----------------------------------
-// 3) HELMET
-// -----------------------------------
+// 3) Helmet
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
-    crossOriginOpenerPolicy: false,
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
   })
 );
 
-// -----------------------------------
 // 4) HPP
-// -----------------------------------
 app.use(hpp());
 
-// -----------------------------------
-// 5) HEALTH CHECK
-// -----------------------------------
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
-});
+// 5) Health check
+app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// -----------------------------------
-// 6) ROUTES
-// -----------------------------------
+// 6) Routes
 app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/runs", require("./routes/runRoutes"));
 app.use("/api/surcharge-types", require("./routes/surchargeTypeRoutes"));
-// ... dodaj resztę tras
+app.use("/api/runs", require("./routes/runRoutes"));
 
 module.exports = app;

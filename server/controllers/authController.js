@@ -1,211 +1,104 @@
-// server/controllers/authController.js
-const jwt = require('jsonwebtoken');
-const { body, validationResult } = require('express-validator');
-const { isStrongPassword, passwordStrengthMessage } = require('../utils/validation.js');
-const authService = require('../services/authService.js');
-const userService = require('../services/userService.js');
+const jwt = require("jsonwebtoken");
+const { User } = require("../models");
+const bcrypt = require("bcrypt");
 
-// --- Walidacja rejestracji ---
-const registerValidation = [
-  body('email').isEmail().withMessage('Proszę podać poprawny adres email.').normalizeEmail(),
-  body('firstName').not().isEmpty().withMessage('Imię jest wymagane.').trim().escape(),
-  body('lastName').not().isEmpty().withMessage('Nazwisko jest wymagane.').trim().escape(),
-  body('password').custom(value => {
-    if (!isStrongPassword(value)) {
-      throw new Error(passwordStrengthMessage);
-    }
-    return true;
-  }),
-];
+const ACCESS_EXPIRES = "15m";
+const REFRESH_EXPIRES = "7d";
 
-// --- Rejestracja użytkownika ---
-const register = async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    // Zwracamy tylko pierwszy błąd dla uproszczenia
-    return res.status(400).json({ error: errors.array({ onlyFirstError: true })[0].msg });
-  }
+const createAccess = (user) =>
+  jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
+    expiresIn: ACCESS_EXPIRES,
+  });
 
-  try {
-    const { email, password, firstName, lastName } = req.body;
-    // Używamy userService do stworzenia użytkownika, co jest zgodne z architekturą
-    const newUser = await userService.createUser({
-      email,
-      password,
-      firstName,
-      lastName,
-      role: 'user', // jawnie ustawiamy rolę
-    });
-
-    // Zwracamy tylko niezbędne, bezpieczne dane
-    const userPayload = {
-      email: newUser.email,
-      role: newUser.role,
-    };
-
-    return res.status(201).json({
-      message: 'Użytkownik został pomyślnie zarejestrowany.',
-      user: userPayload, // Zwracamy okrojone dane użytkownika
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// --- Walidacja logowania ---
-const loginValidation = [
-  body('email').isEmail().withMessage('Proszę podać poprawny adres email.').normalizeEmail(),
-  body('password').not().isEmpty().withMessage('Hasło nie może być puste.'),
-];
-
-// --- Logowanie użytkownika ---
-const login = async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: errors.array({ onlyFirstError: true })[0].msg });
-  }
-
-  try {
-    const { email, password } = req.body;
-    const user = await userService.loginUser(email, password);
-
-    if (!user) {
-      return res.status(401).json({ error: 'Nieprawidłowe dane logowania.' });
-    }
-
-    const { accessToken, refreshToken } = authService.generateTokens(user);
-
-    // Zapisz refreshToken w httpOnly cookie
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // tylko HTTPS w produkcji
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      path: '/api/auth/refresh', // 👈 Kluczowe: ciasteczko dostępne tylko dla tej ścieżki
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dni
-    });
-
-    const userPayload = {
-      email: user.email,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
-    };
-
-    return res.json({ accessToken, user: userPayload });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// --- Pobieranie danych zalogowanego użytkownika ---
-const getMe = async (req, res, next) => {
-  try {
-    // req.auth jest dodawane przez middleware authenticateToken
-    if (!req.auth?.userId) {
-      return res.status(401).json({ error: 'Authentication data not found in token.' });
-    }
-
-    const user = await userService.findUserById(req.auth.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User associated with this token no longer exists.' });
-    }
-
-    // Zwracamy obiekt użytkownika bez hasha hasła i tokenu odświeżania
-    // Serwis findUserById już to robi, więc nie musimy niczego wykluczać.
-    // Dodatkowo, konwertujemy pola na snake_case dla spójności z resztą API.
-    const { passwordHash, refreshToken, ...userPayload } = user.get({ plain: true });
-    return res.json(userPayload);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// --- Odświeżanie tokenu (refresh token flow) ---
-const refreshToken = async (req, res, next) => {
-  const tokenFromCookie = req.cookies.refreshToken;
-  if (!tokenFromCookie) {
-    return res.status(401).json({ error: 'Nie znaleziono tokenu odświeżającego.' });
-  }
-
-  try {
-    console.log('🔁 Refresh request received. Cookie present:', !!tokenFromCookie);
-
-    // Krok 1: Zweryfikuj token JWT, aby upewnić się, że jest poprawny i nie wygasł.
-    // Use the same env name as authService: JWT_REFRESH_SECRET
-    if (!process.env.JWT_REFRESH_SECRET) {
-      console.error('CRITICAL: JWT_REFRESH_SECRET is not set!');
-      return res.status(500).json({ error: 'Server configuration error.' });
-    }
-    const decoded = jwt.verify(tokenFromCookie, process.env.JWT_REFRESH_SECRET);
-
-    // Krok 2: Znajdź użytkownika na podstawie ID z tokenu.
-    const user = await userService.findUserById(decoded.userId);
-    if (!user) {
-      return res.status(403).json({ error: 'Użytkownik powiązany z tym tokenem już nie istnieje.' });
-    }
-
-    // Krok 3: Sprawdź, czy token w cookie zgadza się z tym w bazie danych.
-    if (user.refreshToken !== tokenFromCookie) {
-      return res.status(403).json({ error: 'Token odświeżający jest nieaktualny. Zaloguj się ponownie.' });
-    }
-
-    // Krok 4: Generujemy nową parę tokenów (accessToken i refreshToken)
-    const { accessToken, refreshToken: newRefreshToken } = await authService.rotateTokens(user);
-
-    // Krok 5: Ustawiamy nowe ciasteczko z nowym refreshToken
-    res.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      path: '/api/auth/refresh',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dni
-    });
-
-    return res.json({
-      accessToken,
-      message: 'Token successfully refreshed.' // Opcjonalny komunikat
-    });
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(403).json({ error: 'Token odświeżający wygasł. Proszę zalogować się ponownie.' });
-    }
-    console.error('Refresh token error:', error);
-    next(error);
-  }
-};
-
-// --- Wylogowanie użytkownika ---
-const logout = async (req, res, next) => {
-  try {
-    const tokenFromCookie = req.cookies.refreshToken;
-    if (tokenFromCookie) {
-      const user = await userService.findUserByRefreshToken(tokenFromCookie);
-      // Unieważniamy token w bazie danych
-      if (user) {
-        await userService.updateUserRefreshToken(user.id, null);
-      }
-    }
-
-    // Usuwamy cookie po stronie klienta
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      path: '/api/auth/refresh', // 👈 Musi być zgodne z ustawieniami przy tworzeniu
-    });
-
-    return res.status(200).json({ message: 'Wylogowano pomyślnie.' });
-  } catch (error) {
-    next(error);
-  }
-};
+const createRefresh = (user) =>
+  jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: REFRESH_EXPIRES,
+  });
 
 module.exports = {
-  registerValidation,
-  register,
-  loginValidation,
-  login,
-  getMe,
-  logout,
-  refreshToken,
+  // -------------------------
+  // LOGIN
+  // -------------------------
+  async login(req, res) {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    const accessToken = createAccess(user);
+    const refreshToken = createRefresh(user);
+
+    // HTTP-only cookie in production only
+    const secure = process.env.NODE_ENV === "production";
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure,
+      sameSite: "none",
+      path: "/",
+      maxAge: 7 * 24 * 3600 * 1000,
+    });
+
+    return res.json({ accessToken });
+  },
+
+  // -------------------------
+  // REFRESH
+  // -------------------------
+  async refreshToken(req, res) {
+    const token = req.cookies.refreshToken;
+    if (!token) return res.status(401).json({ message: "No refresh token" });
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+      const user = await User.findByPk(decoded.id);
+
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const newAccess = createAccess(user);
+
+      return res.json({ accessToken: newAccess });
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+  },
+
+  // -------------------------
+  // LOGOUT
+  // -------------------------
+  logout(req, res) {
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+      path: "/",
+    });
+
+    return res.json({ message: "Logged out" });
+  },
+
+  // -------------------------
+  // /ME
+  // -------------------------
+  authMiddleware(req, res, next) {
+    const header = req.headers.authorization;
+    if (!header) return res.status(401).json({ message: "No token" });
+
+    const token = header.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+  },
+
+  async me(req, res) {
+    return res.json({ userId: req.user.id, email: req.user.email });
+  },
 };
