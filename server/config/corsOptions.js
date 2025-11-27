@@ -1,25 +1,20 @@
 // server/config/corsOptions.js
 
 const allowedOrigins = [
-  "http://localhost:5173",                               // Lokalny frontend (DEV)
-  "https://my-tms-project-frontend.onrender.com",        // Produkcyjny frontend (Render)
+  'http://localhost:5173',
+  'https://my-tms-project-frontend.onrender.com'
 ];
 
-const corsOptions = {
+module.exports = {
   origin: (origin, callback) => {
-    // Pozwalamy na brak origin (np. Postman, curl)
+    // allow mobile apps / curl / postman without origin
     if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`❌ CORS blocked: ${origin}`));
-    }
+    console.log("❌ CORS blocked:", origin);
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
-  optionsSuccessStatus: 204,
-  allowedHeaders: ["Content-Type", "Authorization"],
-  methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
 };
-
-module.exports = corsOptions;
