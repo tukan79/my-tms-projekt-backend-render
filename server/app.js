@@ -58,9 +58,9 @@ app.use(
       // Zezwalaj na żądania bez 'origin' (np. z Postmana, testów serwerowych)
       // LUB gdy 'origin' jest na liście dozwolonych
       if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
+        callback(null, origin); // Zwróć konkretny origin zamiast 'true'
       } else {
-        logger.warn(`CORS blocked request from origin: ${origin}`);
+        logger.warn(`CORS blocked request from unallowed origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
