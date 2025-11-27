@@ -12,6 +12,7 @@ const hpp = require('hpp');
 const logger = require('./config/logger.js');
 const { sequelize } = require('./models');
 
+// ROUTES
 const authRoutes = require('./routes/authRoutes.js');
 const driverRoutes = require('./routes/driverRoutes.js');
 const userRoutes = require('./routes/userRoutes.js');
@@ -31,63 +32,72 @@ const errorMiddleware = require('./middleware/errorMiddleware.js');
 
 const app = express();
 
-// --- TRUST PROXY (Render cookies) ---
 app.set('trust proxy', 1);
 
-// === CORE MIDDLEWARE ===
+// 🌐 LOGGING ORIGIN (diagnostyka CORS)
+app.use((req, res, next) => {
+  console.log("🌐 Incoming Origin:", req.headers.origin);
+  next();
+});
+
 app.use(cookieParser());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
-app.use(helmet());
-app.use(hpp());
 
-// === CORS CONFIG (FIXED FOR COOKIES) ===
+// === CORS CONFIG (MUST BE BEFORE HELMET) ===
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'https://my-tms-project-frontend.vercel.app',
-  'https://my-tms-projekt-frontend.onrender.com',
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  /\.vercel\.app$/,
+  /\.onrender\.com$/,
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // pozwalamy na brak origin (Postman, serwery backendowe)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      const allowed = allowedOrigins.some((allowed) =>
+        allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+      );
+
+      if (allowed) {
         return callback(null, origin);
       }
 
-      logger.warn(`❌ CORS blocked request from unallowed origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
+      console.warn("❌ CORS blocked origin:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
-    credentials: true, // wymagane dla cookies
-    optionsSuccessStatus: 200,
+    credentials: true,
   })
 );
+
+// === HELMET (must NOT override CORS policy) ===
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+app.use(hpp());
 
 // === RATE LIMITING ===
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 1000 : 5000,
-  message: { error: 'Too many requests from this IP, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
+  message: { error: 'Too many requests, try again later' },
 });
 app.use('/api', apiLimiter);
 
-// === AUTH LIMITER ===
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 20 : 100,
-  message: { error: 'Too many authentication attempts' },
-  standardHeaders: true,
-  legacyHeaders: false,
+  message: { error: 'Too many login attempts' },
 });
 app.use('/api/auth', authLimiter);
 
-// === NO CACHE FOR API ===
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
@@ -131,13 +141,13 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
 // === 404 HANDLER ===
-app.use((req, res) =>
+app.use((req, res) => {
   res.status(404).json({
     error: `Resource not found: ${req.originalUrl}`,
-  })
-);
+  });
+});
 
-// === ERROR HANDLER ===
+// === GLOBAL ERROR HANDLER ===
 app.use(errorMiddleware);
 
 module.exports = app;
