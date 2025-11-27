@@ -1,143 +1,111 @@
-// Plik: server/services/manifestService.js
-const PDFDocument = require('pdfkit');
-const { Run, Driver, Truck, Trailer, Order, Assignment } = require('../models');
+// Plik: server/services/trailerService.js
+const { Trailer, sequelize } = require('../models');
 
-const generateRunManifestPDF = async (runId) => {
-  // 1. Pobierz wszystkie dane jednym zapytaniem
-  const run = await Run.findByPk(runId, {
-    include: [
-      { model: Driver, as: 'driver', attributes: ['firstName', 'lastName'] },
-      { model: Truck, as: 'truck', attributes: ['registrationPlate'] },
-      { model: Trailer, as: 'trailer', attributes: ['registrationPlate'] },
-      {
-        model: Assignment,
-        as: 'assignments',
-        attributes: ['createdAt'],
-        include: [{
-          model: Order,
-          as: 'order',
-          attributes: [
-            'orderNumber',
-            'customerReference',
-            'senderDetails',
-            'recipientDetails',
-            'cargoDetails'
-          ],
-        }],
-      },
-    ],
-    order: [
-      [{ model: Assignment, as: 'assignments' }, 'createdAt', 'ASC']
-    ],
+/**
+ * Pobiera wszystkie naczepy przypisane do firmy użytkownika
+ */
+const findTrailersByCompany = async (companyId = null) => {
+  // Możesz dodać filtr po companyId jeśli modele to wspierają
+  return Trailer.findAll({
+    order: [['registrationPlate', 'ASC']],
   });
+};
 
-  if (!run) {
-    throw new Error('Run not found');
+/**
+ * Tworzy nową naczepę
+ */
+const createTrailer = async (trailerData) => {
+  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailerData;
+
+  if (!registrationPlate || !brand) {
+    throw new Error('Numer rejestracyjny i marka są wymagane.');
   }
 
-  // Wyodrębnij same zamówienia
-  const orders = run.assignments.map(a => a.order);
-
-  // 2. Generowanie PDF do bufora (bez zagnieżdżonych template literals)
-  const doc = new PDFDocument({ margin: 50, size: 'A4' });
-  const buffers = [];
-
-  doc.on('data', (chunk) => buffers.push(chunk));
-
-  const pdfPromise = new Promise((resolve, reject) => {
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
-    doc.on('error', reject);
+  return Trailer.create({
+    registrationPlate,
+    brand,
+    model: model || null,
+    capacityKg: capacityKg || null,
   });
+};
 
-  // --- Nagłówek ---
-  doc
-    .fontSize(20)
-    .font('Helvetica-Bold')
-    .text(`Run Manifest: #${run.id}`, { align: 'center' });
+/**
+ * Aktualizuje istniejącą naczepę
+ */
+const updateTrailer = async (trailerId, trailerData) => {
+  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailerData;
 
-  doc.moveDown();
-  doc.fontSize(12).font('Helvetica');
+  const [updatedCount, updatedTrailers] = await Trailer.update(
+    {
+      registrationPlate,
+      brand,
+      model: model || null,
+      capacityKg: capacityKg || null,
+    },
+    {
+      where: { id: trailerId },
+      returning: true,
+    }
+  );
 
-  const runDate = new Date(run.runDate).toLocaleDateString('pl-PL');
-  const driverName = run.driver ? `${run.driver.firstName} ${run.driver.lastName}` : 'N/A';
-  const vehicleReg = run.truck?.registrationPlate || 'N/A';
-  const trailerReg = run.trailer?.registrationPlate || null;
+  return updatedCount > 0 ? updatedTrailers[0] : null;
+};
 
-  doc.text(`Date: ${runDate}`);
-  doc.text(`Driver: ${driverName}`);
-  doc.text(`Vehicle: ${vehicleReg}`);
+/**
+ * Usuwa naczepę
+ */
+const deleteTrailer = async (trailerId) => {
+  // Jeśli model ma paranoid: true, będzie to soft delete
+  return Trailer.destroy({
+    where: { id: trailerId },
+  });
+};
 
-  if (trailerReg) {
-    doc.text(`Trailer: ${trailerReg}`);
+/**
+ * Import wielu naczep (bulk) w ramach transakcji
+ */
+const importTrailers = async (trailerArray) => {
+  if (!Array.isArray(trailerArray) || trailerArray.length === 0) {
+    throw new Error('Invalid input: array of trailers required.');
   }
 
-  doc.moveDown(2);
+  return sequelize.transaction(async (t) => {
+    let importedCount = 0;
+    const errors = [];
 
-  // --- Tabela ---
-  const tableTop = doc.y;
-  const columnWidths = [100, 120, 120, 50, 50];
-  const headers = ['Consignment #', 'Sender', 'Recipient', 'Pallets', 'Weight (kg)'];
+    for (const [index, trailer] of trailerArray.entries()) {
+      try {
+        const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailer;
 
-  doc.font('Helvetica-Bold');
+        if (!registrationPlate || !brand) {
+          errors.push(`Row ${index + 1}: registrationPlate and brand are required.`);
+          continue;
+        }
 
-  headers.forEach((header, i) => {
-    const x =
-      50 +
-      columnWidths
-        .slice(0, i)
-        .reduce((sum, w) => sum + w, 0);
+        await Trailer.upsert(
+          {
+            registrationPlate,
+            brand,
+            model: model || null,
+            capacityKg: capacityKg || null,
+          },
+          { transaction: t }
+        );
 
-    doc.text(header, x, tableTop);
+        importedCount++;
+      } catch (err) {
+        errors.push(`Row ${index + 1}: ${err.message}`);
+      }
+    }
+
+    return { importedCount, errors };
   });
-
-  doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-  doc.moveDown();
-
-  // --- Wiersze tabeli ---
-  doc.font('Helvetica');
-
-  orders.forEach(order => {
-    const rowY = doc.y;
-
-    const totalPallets = (order.cargoDetails?.pallets || [])
-      .reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
-
-    const totalKilos = order.cargoDetails?.total_kilos || 0;
-
-    const rowData = [
-      order.orderNumber || order.customerReference,
-      order.senderDetails?.name || 'N/A',
-      order.recipientDetails?.name || 'N/A',
-      totalPallets,
-      totalKilos
-    ];
-
-    rowData.forEach((cell, i) => {
-      const x =
-        50 +
-        columnWidths
-          .slice(0, i)
-          .reduce((sum, w) => sum + w, 0);
-
-      doc.text(String(cell), x, rowY, { width: columnWidths[i] - 10 });
-    });
-
-    doc.moveDown(1.5);
-  });
-
-  // --- Stopka ---
-  const pageHeight = doc.page.height;
-  const generatedAt = new Date().toLocaleString();
-
-  doc
-    .fontSize(8)
-    .text(`Generated on: ${generatedAt}`, 50, pageHeight - 50);
-
-  doc.end();
-
-  return pdfPromise;
 };
 
 module.exports = {
-  generateRunManifestPDF,
+  findTrailersByCompany,
+  createTrailer,
+  updateTrailer,
+  deleteTrailer,
+  importTrailers,
 };

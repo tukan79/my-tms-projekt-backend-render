@@ -1,13 +1,31 @@
-// Plik server/controllers/driverController.js
+// server/controllers/driverController.js
+
 const driverService = require('../services/driverService.js');
 const Papa = require('papaparse');
 const fs = require('fs');
 const path = require('path');
 
+const allowedDriverFields = [
+  'first_name',
+  'last_name',
+  'phone_number',
+  'cpc_number',
+  'login_code',
+  'license_number',
+  'is_active',
+];
+
+function extractDriverFields(body) {
+  const data = {};
+  for (const key of allowedDriverFields) {
+    if (body[key] !== undefined) data[key] = body[key];
+  }
+  return data;
+}
 
 exports.getAllDrivers = async (req, res, next) => {
   try {
-    const drivers = await driverService.findDriversByCompany(); 
+    const drivers = await driverService.findDriversByCompany();
     res.status(200).json({ drivers: drivers || [] });
   } catch (error) {
     next(error);
@@ -17,7 +35,7 @@ exports.getAllDrivers = async (req, res, next) => {
 exports.exportDrivers = async (req, res, next) => {
   try {
     const drivers = await driverService.findDriversByCompany();
-    const csv = Papa.unparse(drivers.map(d => d.get({ plain: true }))); // Używamy get({ plain: true })
+    const csv = Papa.unparse(drivers.map(d => d.get({ plain: true })));
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `drivers_${timestamp}.csv`;
@@ -27,20 +45,22 @@ exports.exportDrivers = async (req, res, next) => {
       fs.mkdirSync(exportsDir, { recursive: true });
     }
 
-    const filePath = path.join(exportsDir, filename);
-    fs.writeFileSync(filePath, csv, 'utf8');
+    fs.writeFileSync(path.join(exportsDir, filename), csv, 'utf8');
 
-    res.status(200).json({ message: `File successfully exported to server as ${filename}` });
+    res.status(200).json({ message: `File successfully exported as ${filename}` });
   } catch (error) {
     console.error('Failed to export drivers:', error);
-    res.status(500).json({ error: 'An error occurred while exporting drivers.' });
+    res.status(500).json({ error: 'Error exporting drivers.' });
   }
 };
 
 exports.importDrivers = async (req, res, next) => {
   try {
     const result = await driverService.importDrivers(req.body);
-    res.status(201).json({ message: `Successfully processed ${result.count} drivers.`, ...result });
+    res.status(201).json({ 
+      message: `Successfully processed ${result.count} drivers.`,
+      ...result,
+    });
   } catch (error) {
     next(error);
   }
@@ -48,20 +68,13 @@ exports.importDrivers = async (req, res, next) => {
 
 exports.createDriver = async (req, res, next) => {
   try {
-    // Prosta walidacja - można ją rozbudować
     if (!req.body.first_name || !req.body.last_name) {
       return res.status(400).json({ error: 'Imię i nazwisko kierowcy są wymagane.' });
     }
-    // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const newDriver = await driverService.createDriver({
-      first_name: req.body.first_name,
-      last_name: req.body.last_name,
-      phone_number: req.body.phone_number,
-      cpc_number: req.body.cpc_number,
-      login_code: req.body.login_code,
-      license_number: req.body.license_number,
-      is_active: req.body.is_active,
-    });
+
+    const payload = extractDriverFields(req.body);
+    const newDriver = await driverService.createDriver(payload);
+
     res.status(201).json(newDriver);
   } catch (error) {
     next(error);
@@ -70,26 +83,15 @@ exports.createDriver = async (req, res, next) => {
 
 exports.updateDriver = async (req, res, next) => {
   try {
-    const { driverId } = req.params;
-
-    // Prosta walidacja
     if (!req.body.first_name || !req.body.last_name || !req.body.license_number) {
       return res.status(400).json({ error: 'Imię, nazwisko i numer prawa jazdy są wymagane.' });
     }
 
-    // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const updatedDriver = await driverService.updateDriver(driverId, {
-      first_name: req.body.first_name,
-      last_name: req.body.last_name,
-      phone_number: req.body.phone_number,
-      cpc_number: req.body.cpc_number,
-      login_code: req.body.login_code,
-      license_number: req.body.license_number,
-      is_active: req.body.is_active,
-    });
+    const payload = extractDriverFields(req.body);
+    const updatedDriver = await driverService.updateDriver(req.params.driverId, payload);
 
     if (!updatedDriver) {
-      return res.status(404).json({ error: 'Nie znaleziono kierowcy lub nie masz uprawnień do jego edycji.' });
+      return res.status(404).json({ error: 'Nie znaleziono kierowcy lub brak uprawnień.' });
     }
 
     res.json(updatedDriver);
@@ -100,15 +102,13 @@ exports.updateDriver = async (req, res, next) => {
 
 exports.deleteDriver = async (req, res, next) => {
   try {
-    const { driverId } = req.params;
-
-    const changes = await driverService.deleteDriver(driverId);
+    const changes = await driverService.deleteDriver(req.params.driverId);
 
     if (changes === 0) {
-      return res.status(404).json({ error: 'Nie znaleziono kierowcy lub nie masz uprawnień do jego usunięcia.' });
+      return res.status(404).json({ error: 'Nie znaleziono kierowcy lub brak uprawnień.' });
     }
 
-    res.status(204).send(); // 204 No Content
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

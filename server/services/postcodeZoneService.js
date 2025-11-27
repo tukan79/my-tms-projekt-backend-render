@@ -1,14 +1,56 @@
-// Plik server/services/postcodeZoneService.js
+// Plik: server/services/postcodeZoneService.js
 const { PostcodeZone, sequelize } = require('../models');
 
+/* ============================================================================
+   HELPERS
+============================================================================ */
+
+/**
+ * Normalizuje listę wzorców kodów pocztowych:
+ * - string z separatorami ";" → tablica
+ * - pusty input → []
+ */
+function normalizePatterns(patterns) {
+  if (typeof patterns === 'string') {
+    return patterns
+      .split(';')
+      .map(p => p.trim())
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(patterns)) return patterns;
+
+  return [];
+}
+
+/**
+ * Normalizuje flagę is_home_zone (różne możliwe formaty)
+ */
+function normalizeIsHome(value) {
+  return ['true', '1', 'yes', 'y'].includes(String(value).toLowerCase());
+}
+
+/* ============================================================================
+   CREATE
+============================================================================ */
+
 const createZone = async (zoneData) => {
-  const { zone_name: zoneName, postcode_patterns: postcodePatterns, is_home_zone: isHomeZone } = zoneData;
+  const {
+    zone_name,
+    postcode_patterns,
+    is_home_zone,
+  } = zoneData;
+
   return PostcodeZone.create({
-    zoneName: zoneName,
-    postcodePatterns: postcodePatterns || [],
-    isHomeZone: isHomeZone || false,
+    zoneName: zone_name,
+    postcodePatterns: normalizePatterns(postcode_patterns),
+    isHomeZone: Boolean(is_home_zone),
   });
 };
+
+/* ============================================================================
+   FIND ALL
+============================================================================ */
 
 const findAllZones = async () => {
   return PostcodeZone.findAll({
@@ -16,14 +58,22 @@ const findAllZones = async () => {
   });
 };
 
+/* ============================================================================
+   UPDATE
+============================================================================ */
+
 const updateZone = async (zoneId, zoneData) => {
-  const { zone_name: zoneName, postcode_patterns: postcodePatterns, is_home_zone: isHomeZone } = zoneData;
-  
-  const [updatedRowsCount, updatedZones] = await PostcodeZone.update(
+  const {
+    zone_name,
+    postcode_patterns,
+    is_home_zone,
+  } = zoneData;
+
+  const [count, updatedRows] = await PostcodeZone.update(
     {
-      zoneName: zoneName,
-      postcodePatterns,
-      isHomeZone,
+      zoneName: zone_name,
+      postcodePatterns: normalizePatterns(postcode_patterns),
+      isHomeZone: Boolean(is_home_zone),
     },
     {
       where: { id: zoneId },
@@ -31,52 +81,48 @@ const updateZone = async (zoneId, zoneData) => {
     }
   );
 
-  return updatedRowsCount > 0 ? updatedZones[0] : null;
+  return count > 0 ? updatedRows[0] : null;
 };
 
+/* ============================================================================
+   DELETE
+============================================================================ */
+
 const deleteZone = async (zoneId) => {
-  // W przyszłości można dodać walidację, czy strefa nie jest używana w żadnym cenniku
-  // Model PostcodeZone nie ma `paranoid: true`, więc to będzie twarde usunięcie.
+  // przyszłościowo: można dodać walidację, czy strefa nie jest używana w cenniku
   return PostcodeZone.destroy({ where: { id: zoneId } });
 };
 
+/* ============================================================================
+   IMPORT (bulk + updateOnDuplicate)
+============================================================================ */
+
 const importZones = async (zonesData) => {
   return sequelize.transaction(async (t) => {
-    const zonesToCreateOrUpdate = [];
+    const cleanedZones = zonesData
+      .filter(z => z.zone_name) // pomijamy puste
+      .map(z => ({
+        zoneName: z.zone_name,
+        postcodePatterns: normalizePatterns(z.postcode_patterns),
+        isHomeZone: normalizeIsHome(z.is_home_zone),
+      }));
 
-    for (const zone of zonesData) {
-      if (!zone.zone_name) continue;
-
-      let patterns;
-      if (typeof zone.postcode_patterns === 'string') {
-        patterns = zone.postcode_patterns.split(';').map(p => p.trim()).filter(Boolean);
-      } else if (Array.isArray(zone.postcode_patterns)) {
-        patterns = zone.postcode_patterns;
-      } else {
-        patterns = [];
-      }
-      const isHomeZone = ['true', 'yes', '1'].includes(String(zone.is_home_zone).toLowerCase());
-
-      zonesToCreateOrUpdate.push({
-        zoneName: zone.zone_name,
-        postcodePatterns: patterns,
-        isHomeZone: isHomeZone,
-      });
-    }
-
-    if (zonesToCreateOrUpdate.length === 0) {
+    if (cleanedZones.length === 0) {
       return { count: 0 };
     }
 
-    const importedZones = await PostcodeZone.bulkCreate(zonesToCreateOrUpdate, {
+    const imported = await PostcodeZone.bulkCreate(cleanedZones, {
       transaction: t,
-      updateOnDuplicate: ['postcodePatterns', 'isHomeZone'], // Pola do aktualizacji przy konflikcie
+      updateOnDuplicate: ['postcodePatterns', 'isHomeZone'],
     });
 
-    return { count: importedZones.length };
+    return { count: imported.length };
   });
 };
 
+/* ============================================================================
+   EXPORT
+============================================================================ */
 module.exports = {
   createZone,
   findAllZones,

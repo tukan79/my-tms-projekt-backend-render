@@ -1,100 +1,111 @@
-// Plik server/controllers/truckController.js
-const truckService = require('../services/truckService.js'); // Użyjemy serwisu
-const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+// Plik: server/services/truckService.js
+const { Truck, sequelize } = require('../models');
 
-exports.getAllTrucks = async (req, res, next) => {
-  try {
-    const trucks = await truckService.findTrucksByCompany();
-    res.json({ trucks: trucks || [] });
-  } catch (error) {
-    next(error);
-  }
+/**
+ * Pobiera wszystkie pojazdy przypisane do firmy użytkownika
+ */
+const findTrucksByCompany = async (companyId = null) => {
+  // Możesz dodać filtr po companyId jeśli modele to wspierają
+  return Truck.findAll({
+    order: [['registrationPlate', 'ASC']],
+  });
 };
 
-exports.exportTrucks = async (req, res, next) => {
-  try {
-    const trucks = await truckService.findTrucksByCompany();
-    const csv = Papa.unparse(trucks.map(t => t.get({ plain: true }))); // Używamy get({ plain: true })
+/**
+ * Tworzy nowy pojazd
+ */
+const createTruck = async (truckData) => {
+  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truckData;
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `trucks_${timestamp}.csv`;
-    const exportsDir = path.join(__dirname, '../exports');
-
-    if (!fs.existsSync(exportsDir)) {
-      fs.mkdirSync(exportsDir, { recursive: true });
-    }
-
-    const filePath = path.join(exportsDir, filename);
-    fs.writeFileSync(filePath, csv, 'utf8');
-
-    res.status(200).json({ message: `File successfully exported to server as ${filename}` });
-  } catch (error) {
-    next(error); // Przekazujemy błąd do centralnego error middleware
+  if (!registrationPlate || !brand) {
+    throw new Error('Numer rejestracyjny i marka są wymagane.');
   }
+
+  return Truck.create({
+    registrationPlate,
+    brand,
+    model: model || null,
+    capacityKg: capacityKg || null,
+  });
 };
 
-exports.createTruck = async (req, res, next) => {
-  try {
-    const truckData = req.body;
-    if (!truckData.registration_plate || !truckData.brand) {
-      return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
+/**
+ * Aktualizuje istniejący pojazd
+ */
+const updateTruck = async (truckId, truckData) => {
+  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truckData;
+
+  const [updatedCount, updatedTrucks] = await Truck.update(
+    {
+      registrationPlate,
+      brand,
+      model: model || null,
+      capacityKg: capacityKg || null,
+    },
+    {
+      where: { id: truckId },
+      returning: true,
     }
-    
-    // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const newTruck = await truckService.createTruck(req.body);
-    res.status(201).json(newTruck);
-  } catch (error) {
-    next(error);
-  }
+  );
+
+  return updatedCount > 0 ? updatedTrucks[0] : null;
 };
 
-exports.importTrucks = async (req, res, next) => {
-  try {
-    const { trucks } = req.body;
-    if (!trucks || !Array.isArray(trucks)) {
-      return res.status(400).json({ error: 'Invalid data format. "trucks" array is required.' });
-    }
-
-    const result = await truckService.importTrucks(trucks);
-    res.status(201).json({ message: `${result.importedCount} trucks imported successfully.`, ...result });
-  } catch (error) {
-    next(error);
-  }
+/**
+ * Usuwa pojazd
+ */
+const deleteTruck = async (truckId) => {
+  // Jeśli model ma paranoid: true, będzie to soft delete
+  return Truck.destroy({
+    where: { id: truckId },
+  });
 };
 
-exports.updateTruck = async (req, res, next) => {
-  try {
-    const { truckId } = req.params;
-
-    if (!req.body.registration_plate || !req.body.brand) {
-      return res.status(400).json({ error: 'Numer rejestracyjny i marka są wymagane.' });
-    }
-    
-    // Mapujemy snake_case z req.body na camelCase dla serwisu
-    const updatedTruck = await truckService.updateTruck(truckId, req.body);
-
-    if (!updatedTruck) {
-      return res.status(404).json({ error: 'Nie znaleziono pojazdu lub nie masz uprawnień do jego edycji.' });
-    }
-
-    res.json(updatedTruck);
-  } catch (error) {
-    next(error);
+/**
+ * Import wielu pojazdów (bulk) w ramach transakcji
+ */
+const importTrucks = async (truckArray) => {
+  if (!Array.isArray(truckArray) || truckArray.length === 0) {
+    throw new Error('Invalid input: array of trucks required.');
   }
+
+  return sequelize.transaction(async (t) => {
+    let importedCount = 0;
+    const errors = [];
+
+    for (const [index, truck] of truckArray.entries()) {
+      try {
+        const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truck;
+
+        if (!registrationPlate || !brand) {
+          errors.push(`Row ${index + 1}: registrationPlate and brand are required.`);
+          continue;
+        }
+
+        await Truck.upsert(
+          {
+            registrationPlate,
+            brand,
+            model: model || null,
+            capacityKg: capacityKg || null,
+          },
+          { transaction: t }
+        );
+
+        importedCount++;
+      } catch (err) {
+        errors.push(`Row ${index + 1}: ${err.message}`);
+      }
+    }
+
+    return { importedCount, errors };
+  });
 };
 
-exports.deleteTruck = async (req, res, next) => {
-  try {
-    const { truckId } = req.params;
-    const changes = await truckService.deleteTruck(truckId);
-    if (changes === 0) {
-      return res.status(404).json({ error: 'Nie znaleziono pojazdu lub nie masz uprawnień do jego usunięcia.' });
-    }
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
+module.exports = {
+  findTrucksByCompany,
+  createTruck,
+  updateTruck,
+  deleteTruck,
+  importTrucks,
 };
-//new commit

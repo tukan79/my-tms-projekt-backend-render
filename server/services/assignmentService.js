@@ -1,91 +1,76 @@
-// Plik server/services/assignmentService.js
-const { Assignment, Order, sequelize } = require('../models');
-const { Op } = require('sequelize'); // Op jest już importowany z sequelize
+// Plik: server/controllers/assignmentController.js
+const assignmentService = require('../services/assignmentService.js');
 
-const createAssignment = async (assignmentData) => {
-  const { orderId, runId, notes } = assignmentData;
-  // Używamy transakcji, aby zapewnić, że obie operacje (wstawienie i aktualizacja) powiodą się lub żadna.
-  return sequelize.transaction(async (t) => {
-    // Krok 1: Stwórz nowe przypisanie używając modelu Sequelize
-    const newAssignment = await Assignment.create(
-      { orderId, runId, notes },
-      { transaction: t }
-    );
-
-    // Krok 2: Zaktualizuj status zlecenia na "zaplanowane"
-    await Order.update(
-      { status: 'zaplanowane' },
-      { where: { id: orderId }, transaction: t }
-    );
-
-    // Krok 3: Zwróć nowo utworzone przypisanie
-    return newAssignment;
-  });
+// Pobierz wszystkie przypisania
+const getAllAssignments = async (req, res, next) => {
+  try {
+    const assignments = await assignmentService.findAllAssignments();
+    res.status(200).json({ assignments: assignments || [] });
+  } catch (error) {
+    next(error);
+  }
 };
 
-const findAllAssignments = async () => {
-  // paranoid: true w modelu automatycznie dodaje `WHERE is_deleted = FALSE`
-  return Assignment.findAll({
-    order: [['createdAt', 'DESC']],
-  });
-};
+// Utwórz pojedyncze przypisanie
+const createAssignment = async (req, res, next) => {
+  try {
+    const { orderId, runId, notes } = req.body;
 
-const deleteAssignment = async (assignmentId) => {
-  // Używamy transakcji, aby zapewnić spójność danych
-  return sequelize.transaction(async (t) => {
-    // Krok 1: Znajdź przypisanie, aby uzyskać order_id
-    const assignment = await Assignment.findByPk(assignmentId, { transaction: t });
-
-    if (!assignment) {
-      return 0; // Przypisanie nie istnieje
+    if (!orderId || !runId) {
+      return res.status(400).json({ error: 'orderId i runId są wymagane.' });
     }
 
-    // Krok 2: Usuń przypisanie (soft delete)
-    const deletedRows = await Assignment.destroy({
-      where: { id: assignmentId },
-      transaction: t,
-    });
-
-    // Krok 3: Zaktualizuj status zlecenia z powrotem na "nowe"
-    await Order.update(
-      { status: 'nowe' },
-      { where: { id: assignment.orderId }, transaction: t }
-    );
-
-    return deletedRows;
-  });
+    const newAssignment = await assignmentService.createAssignment({ orderId, runId, notes });
+    res.status(201).json(newAssignment);
+  } catch (error) {
+    next(error);
+  }
 };
 
-const bulkCreateAssignments = async (runId, orderIds) => {
-  // Używamy transakcji, aby zapewnić, że wszystkie przypisania zostaną utworzone, albo żadne.
-  return sequelize.transaction(async (t) => {
-    if (!orderIds || orderIds.length === 0) {
-      return { createdCount: 0 };
+// Usuń przypisanie po ID
+const deleteAssignment = async (req, res, next) => {
+  try {
+    const { assignmentId } = req.params;
+
+    if (!assignmentId) {
+      return res.status(400).json({ error: 'assignmentId jest wymagane.' });
     }
 
-    // Krok 1: Usuń istniejące przypisania dla tych zleceń, aby uniknąć duplikatów.
-    await Assignment.destroy({
-      where: { orderId: { [Op.in]: orderIds } },
-      transaction: t,
+    const deletedCount = await assignmentService.deleteAssignment(assignmentId);
+
+    if (deletedCount === 0) {
+      return res.status(404).json({ error: 'Assignment not found.' });
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Utwórz przypisania masowo
+const bulkCreateAssignments = async (req, res, next) => {
+  try {
+    const { runId, orderIds } = req.body;
+
+    if (!runId || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: 'runId i niepusta lista orderIds są wymagane.' });
+    }
+
+    const result = await assignmentService.bulkCreateAssignments(runId, orderIds);
+
+    res.status(201).json({
+      message: `${result.createdCount} assignments created successfully.`,
+      ...result
     });
-
-    // Krok 2: Stwórz nowe przypisania za pomocą `bulkCreate`
-    const assignmentsToCreate = orderIds.map(orderId => ({ runId, orderId }));
-    const newAssignments = await Assignment.bulkCreate(assignmentsToCreate, { transaction: t });
-
-    // Krok 3: Zaktualizuj status wszystkich przypisanych zleceń na 'zaplanowane'
-    await Order.update(
-      { status: 'zaplanowane' },
-      { where: { id: { [Op.in]: orderIds } }, transaction: t }
-    );
-
-    return { createdCount: newAssignments.length };
-  });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {
+  getAllAssignments,
   createAssignment,
-  findAllAssignments,
   deleteAssignment,
   bulkCreateAssignments,
 };

@@ -1,309 +1,354 @@
-// Plik server/services/orderService.js
-const { Order, Customer, OrderSurcharge, SurchargeType, sequelize } = require('../models');
-const { Op } = require('sequelize'); // Op jest już importowany z sequelize
-const pricingService = require('./pricingService.js'); // Upewniamy się, że ścieżka jest jednoznaczna
+// Plik: server/services/orderService.js
+const {
+  Order,
+  Customer,
+  OrderSurcharge,
+  sequelize,
+} = require('../models');
+const { Op } = require('sequelize');
+const pricingService = require('./pricingService.js');
+
+/* ------------------------------------------------------------------
+   HELPERS
+------------------------------------------------------------------- */
+
+const normalizeDate = (value) =>
+  value ? value.split('T')[0] : null;
+
+const recalcPriceIfNeeded = async (existing, incoming) => {
+  const changed =
+    JSON.stringify(existing.cargoDetails) !== JSON.stringify(incoming.cargoDetails) ||
+    existing.serviceLevel !== incoming.serviceLevel ||
+    existing.senderDetails?.postCode !== incoming.senderDetails?.postCode ||
+    existing.recipientDetails?.postCode !== incoming.recipientDetails?.postCode ||
+    JSON.stringify(existing.selectedSurcharges) !== JSON.stringify(incoming.selectedSurcharges);
+
+  if (!changed) {
+    console.log('ℹ️ Price not changed — keeping existing values');
+    return {
+      calculatedPrice: existing.calculatedPrice,
+      finalPrice: existing.finalPrice,
+      breakdown: existing.cargoDetails?.priceBreakdown || null,
+    };
+  }
+
+  console.log('🔄 Recalculating price due to changed fields...');
+  return pricingService.calculateOrderPrice(incoming);
+};
+
+/* ------------------------------------------------------------------
+   CREATE ORDER
+------------------------------------------------------------------- */
 
 const createOrder = async (orderData) => {
   return sequelize.transaction(async (t) => {
     const {
-      customer_id: customerId,
-      order_number: orderNumber,
-      service_level: serviceLevel,
-      customer_reference: customerReference,
-      status, // Already camelCase
-      sender_details: senderDetails,
-      recipient_details: recipientDetails,
-      cargo_details: cargoDetails,
-      loading_date_time: loadingDateTime,
-      unloading_date_time: unloadingDateTime,
-      selected_surcharges: selectedSurcharges,
-      unloading_start_time: unloadingStartTime, // Already camelCase
-      unloading_end_time: unloadingEndTime, // Already camelCase
+      customer_id,
+      order_number,
+      service_level,
+      customer_reference,
+      status,
+      sender_details,
+      recipient_details,
+      cargo_details,
+      loading_date_time,
+      unloading_date_time,
+      selected_surcharges,
+      unloading_start_time,
+      unloading_end_time,
     } = orderData;
 
-    // Krok 1: Utwórz zlecenie
-    const newOrder = await Order.create({
-      customerId,
-      orderNumber,
-      serviceLevel,
-      customerReference, // Already camelCase
-      status,
-      senderDetails, // Sequelize automatycznie obsłuży JSONB
-      recipientDetails, // Sequelize automatycznie obsłuży JSONB
-      cargoDetails, // Sequelize automatycznie obsłuży JSONB
-      loadingDateTime: loadingDateTime ? loadingDateTime.split('T')[0] : null,
-      unloadingDateTime: unloadingDateTime ? unloadingDateTime.split('T')[0] : null,
-      selectedSurcharges: selectedSurcharges || [],
-      unloadingStartTime: unloadingStartTime || null,
-      unloadingEndTime: unloadingEndTime || null,
-    }, { transaction: t });
+    const newOrder = await Order.create(
+      {
+        customerId: customer_id,
+        orderNumber: order_number,
+        serviceLevel: service_level,
+        customerReference: customer_reference,
+        status,
+        senderDetails: sender_details,
+        recipientDetails: recipient_details,
+        cargoDetails: cargo_details,
+        loadingDateTime: normalizeDate(loading_date_time),
+        unloadingDateTime: normalizeDate(unloading_date_time),
+        selectedSurcharges: selected_surcharges || [],
+        unloadingStartTime: unloading_start_time || null,
+        unloadingEndTime: unloading_end_time || null,
+      },
+      { transaction: t }
+    );
 
-    // Krok 2: Oblicz cenę i dopłaty
-    const priceResult = await pricingService.calculateOrderPrice(newOrder);
-    if (!priceResult) {
-      return newOrder; // Zwróć zlecenie bez ceny, jeśli wycena się nie powiodła
+    const price = await pricingService.calculateOrderPrice(newOrder).catch(() => null);
+
+    if (price?.breakdown?.surcharges?.length) {
+      await OrderSurcharge.bulkCreate(
+        price.breakdown.surcharges.map((s) => ({
+          orderId: newOrder.id,
+          surchargeTypeId: s.surchargeTypeId,
+          calculatedAmount: s.amount,
+        })),
+        { transaction: t }
+      );
     }
-    
-    // Krok 3: Zapisz dopłaty w tabeli order_surcharges
-    if (priceResult.breakdown?.surcharges?.length > 0) {
-      const surchargesToCreate = priceResult.breakdown.surcharges.map(surcharge => ({
-        orderId: newOrder.id,
-        surchargeTypeId: surcharge.surchargeTypeId, // Zmieniono na camelCase
-        calculatedAmount: surcharge.amount,
-      }));
-      await OrderSurcharge.bulkCreate(surchargesToCreate, { transaction: t });
-    }
 
-    // Krok 4: Zaktualizuj zlecenie o obliczoną cenę i szczegóły wyceny
-    const updatedCargoDetails = { ...newOrder.cargoDetails, priceBreakdown: priceResult.breakdown };
-    const [updatedRowsCount, updatedOrders] = await Order.update({
-      calculatedPrice: priceResult.calculatedPrice,
-      finalPrice: priceResult.finalPrice,
-      cargoDetails: updatedCargoDetails,
-    }, {
-      where: { id: newOrder.id },
-      returning: true,
-      transaction: t,
-    });
+    const cargoWithPrice = {
+      ...newOrder.cargoDetails,
+      priceBreakdown: price?.breakdown || null,
+    };
 
-    return updatedRowsCount > 0 ? updatedOrders[0] : newOrder;
+    const [_, updated] = await Order.update(
+      {
+        calculatedPrice: price?.calculatedPrice || null,
+        finalPrice: price?.finalPrice || null,
+        cargoDetails: cargoWithPrice,
+      },
+      {
+        where: { id: newOrder.id },
+        returning: true,
+        transaction: t,
+      }
+    );
+
+    return updated[0];
   });
 };
+
+/* ------------------------------------------------------------------
+   FIND ALL ORDERS
+------------------------------------------------------------------- */
 
 const findAllOrders = async () => {
   try {
     const orders = await Order.findAll({
-      where: { isDeleted: false }, // paranoid: true w modelu automatycznie dodaje ten warunek
+      where: { isDeleted: false },
       order: [['createdAt', 'DESC']],
-      include: [{ model: Customer, as: 'customer', attributes: ['name', 'customerCode'] }], // Dołącz dane klienta
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['name', 'customerCode'],
+        },
+      ],
     });
-    console.log('📦 Orders from database:', orders.length, 'records');
-    // Opcjonalnie: odkomentuj poniższą linię, aby zobaczyć pełne dane w konsoli
-    // console.log('📦 Orders data:', JSON.stringify(orders, null, 2));
+
     return orders;
   } catch (error) {
     console.error('❌ Error fetching orders:', error);
-    throw error; // Rzucamy błąd dalej, aby został obsłużony przez errorMiddleware
+    throw error;
   }
 };
 
+/* ------------------------------------------------------------------
+   UPDATE ORDER
+------------------------------------------------------------------- */
+
 const updateOrder = async (orderId, orderData) => {
   return sequelize.transaction(async (t) => {
-    // Krok 1: Pobierz aktualny stan zlecenia z bazy danych.
-    const existingOrder = await Order.findByPk(orderId, { transaction: t });
-    if (!existingOrder) {
-      return null; // Zlecenie nie istnieje
-    }
+    const existing = await Order.findByPk(orderId, { transaction: t });
+    if (!existing) return null;
 
-    // Krok 2: Zmapuj przychodzące dane snake_case na camelCase
-    const {
-      customer_id: customerId, order_number: orderNumber, service_level: serviceLevel,
-      customer_reference: customerReference, status, sender_details: senderDetails, // Already camelCase
-      recipient_details: recipientDetails, cargo_details: cargoDetails, // Already camelCase
-      loading_date_time: loadingDateTime, unloading_date_time: unloadingDateTime,
-      selected_surcharges: selectedSurcharges, unloading_start_time: unloadingStartTime, // Already camelCase
-      unloading_end_time: unloadingEndTime, final_price: finalPrice // Already camelCase
-    } = orderData;
+    const incoming = {
+      ...existing.get({ plain: true }),
 
-    // Krok 2a: Połącz istniejące dane z nowymi danymi z formularza.
-    const mergedOrderData = {
-      ...existingOrder.get({ plain: true }), // Pobierz czysty obiekt z istniejącego zlecenia
-      // Użyj zmapowanych danych camelCase
-      
-        customerId, orderNumber, serviceLevel, customerReference, status, senderDetails,
-        recipientDetails, cargoDetails, loadingDateTime, unloadingDateTime, selectedSurcharges,
-        unloadingStartTime, unloadingEndTime, finalPrice
-      
+      customerId: orderData.customer_id ?? existing.customerId,
+      orderNumber: orderData.order_number ?? existing.orderNumber,
+      customerReference: orderData.customer_reference ?? existing.customerReference,
+      status: orderData.status ?? existing.status,
+
+      senderDetails: orderData.sender_details ?? existing.senderDetails,
+      recipientDetails: orderData.recipient_details ?? existing.recipientDetails,
+      cargoDetails: orderData.cargo_details ?? existing.cargoDetails,
+
+      serviceLevel: orderData.service_level ?? existing.serviceLevel,
+      selectedSurcharges: orderData.selected_surcharges ?? existing.selectedSurcharges,
+
+      loadingDateTime: normalizeDate(orderData.loading_date_time) ?? existing.loadingDateTime,
+      unloadingDateTime: normalizeDate(orderData.unloading_date_time) ?? existing.unloadingDateTime,
+
+      unloadingStartTime: orderData.unloading_start_time ?? existing.unloadingStartTime,
+      unloadingEndTime: orderData.unloading_end_time ?? existing.unloadingEndTime,
+
+      finalPrice: orderData.final_price ?? existing.finalPrice,
     };
 
-    // Krok 3: Sprawdź, czy należy przeliczyć cenę.
-    // Porównujemy kluczowe pola, które mają wpływ na cenę.
-    const shouldRecalculatePrice = (
-      JSON.stringify(existingOrder.cargoDetails) !== JSON.stringify(mergedOrderData.cargoDetails) ||
-      existingOrder.senderDetails?.postCode !== mergedOrderData.senderDetails?.postCode ||
-      existingOrder.recipientDetails?.postCode !== mergedOrderData.recipientDetails?.postCode ||
-      existingOrder.serviceLevel !== mergedOrderData.serviceLevel ||
-      JSON.stringify(existingOrder.selectedSurcharges) !== JSON.stringify(mergedOrderData.selectedSurcharges)
+    const price = await recalcPriceIfNeeded(existing, incoming);
+
+    const manualOverride =
+      orderData.final_price &&
+      Number.parseFloat(orderData.final_price) !== price.finalPrice;
+
+    if (manualOverride) {
+      incoming.finalPrice = Number.parseFloat(orderData.final_price);
+      incoming.calculatedPrice = price.calculatedPrice;
+    } else {
+      incoming.finalPrice = price.finalPrice;
+      incoming.calculatedPrice = price.calculatedPrice;
+    }
+
+    incoming.cargoDetails = {
+      ...incoming.cargoDetails,
+      priceBreakdown: price.breakdown,
+    };
+
+    const [count, updated] = await Order.update(
+      {
+        customerId: incoming.customerId,
+        orderNumber: incoming.orderNumber,
+        customerReference: incoming.customerReference,
+        status: incoming.status,
+        senderDetails: incoming.senderDetails,
+        recipientDetails: incoming.recipientDetails,
+        cargoDetails: incoming.cargoDetails,
+        loadingDateTime: incoming.loadingDateTime,
+        unloadingDateTime: incoming.unloadingDateTime,
+        calculatedPrice: incoming.calculatedPrice,
+        finalPrice: incoming.finalPrice,
+        selectedSurcharges: incoming.selectedSurcharges,
+        unloadingStartTime: incoming.unloadingStartTime,
+        unloadingEndTime: incoming.unloadingEndTime,
+      },
+      { where: { id: orderId }, returning: true, transaction: t }
     );
 
-    let priceResult = null;
-    if (shouldRecalculatePrice) {
-      console.log('🔄 Price-affecting field changed. Recalculating price...');
-      try {
-        // Przekazujemy mergedOrderData, które ma już camelCase
-        priceResult = await pricingService.calculateOrderPrice(mergedOrderData); 
-      } catch (error) {
-        console.error(`⚠️ PRICING SKIPPED during update:`, error.message);
-        priceResult = null; // Ustawiamy priceResult na null, aby reszta funkcji działała poprawnie.
-      }
-    } else {
-      console.log('✅ No price-affecting fields changed. Skipping price recalculation.');
-      // Jeśli nie przeliczamy, użyjemy istniejących cen i szczegółów wyceny.
-      priceResult = {
-        calculatedPrice: existingOrder.calculatedPrice,
-        finalPrice: existingOrder.finalPrice,
-        breakdown: existingOrder.cargoDetails?.priceBreakdown
-      };
-    }
+    if (count === 0) return null;
 
-    // Krok 4: Przygotuj ostateczne dane do zapisu.
-    let finalCalculatedPrice = mergedOrderData.calculatedPrice;
-    let finalFinalPrice = mergedOrderData.finalPrice;
-
-    if (priceResult && priceResult.calculatedPrice > 0) {
-      const hasManualPriceOverride = 'final_price' in orderData &&
-                                     orderData.final_price !== '' &&
-                                     Number.parseFloat(orderData.final_price) !== priceResult.finalPrice;
-
-      if (hasManualPriceOverride) {
-        finalCalculatedPrice = priceResult.calculatedPrice;
-        finalFinalPrice = Number.parseFloat(orderData.final_price);
-      } else {
-        finalCalculatedPrice = priceResult.calculatedPrice;
-        finalFinalPrice = priceResult.finalPrice;
-      }
-
-      mergedOrderData.cargoDetails = {
-        ...mergedOrderData.cargoDetails,
-        priceBreakdown: priceResult.breakdown
-      };
-    }
-
-    // Krok 5: Zaktualizuj główne dane zlecenia.
-    const [updatedRowsCount, updatedOrders] = await Order.update({
-      customerId: mergedOrderData.customerId,
-      orderNumber: mergedOrderData.orderNumber,
-      serviceLevel: mergedOrderData.serviceLevel,
-      customerReference: mergedOrderData.customerReference,
-      status: mergedOrderData.status,
-      senderDetails: mergedOrderData.senderDetails,
-      recipientDetails: mergedOrderData.recipientDetails,
-      cargoDetails: mergedOrderData.cargoDetails,
-      loadingDateTime: mergedOrderData.loadingDateTime ? mergedOrderData.loadingDateTime.split('T')[0] : null,
-      unloadingDateTime: mergedOrderData.unloadingDateTime ? mergedOrderData.unloadingDateTime.split('T')[0] : null,
-      calculatedPrice: finalCalculatedPrice,
-      finalPrice: finalFinalPrice,
-      selectedSurcharges: mergedOrderData.selectedSurcharges || [],
-      unloadingStartTime: mergedOrderData.unloadingStartTime || null,
-      unloadingEndTime: mergedOrderData.unloadingEndTime || null,
-    }, {
-      where: { id: orderId },
-      returning: true,
+    await OrderSurcharge.destroy({
+      where: { orderId },
       transaction: t,
     });
 
-    if (updatedRowsCount === 0) {
-      return null;
+    if (price?.breakdown?.surcharges?.length) {
+      await OrderSurcharge.bulkCreate(
+        price.breakdown.surcharges.map((s) => ({
+          orderId,
+          surchargeTypeId: s.surchargeTypeId,
+          calculatedAmount: s.amount,
+        })),
+        { transaction: t }
+      );
     }
 
-    // Krok 6: Zaktualizuj powiązane dopłaty w tabeli order_surcharges.
-    // Najpierw usuwamy stare, potem dodajemy nowe.
-    await OrderSurcharge.destroy({ where: { orderId: orderId }, transaction: t });
-
-    if (priceResult?.breakdown?.surcharges?.length > 0) {
-      const surchargesToCreate = priceResult.breakdown.surcharges.map(surcharge => ({
-        orderId: orderId,
-        surchargeTypeId: surcharge.surchargeTypeId, // Zmieniono na camelCase
-        calculatedAmount: surcharge.amount,
-      }));
-      await OrderSurcharge.bulkCreate(surchargesToCreate, { transaction: t });
-    }
-
-    return updatedOrders[0];
+    return updated[0];
   });
 };
+
+/* ------------------------------------------------------------------
+   IMPORT ORDERS
+------------------------------------------------------------------- */
 
 const importOrders = async (ordersData) => {
   return sequelize.transaction(async (t) => {
-    // Pobierz mapowanie kodów klientów na ich ID
-    const customers = await Customer.findAll({ attributes: ['id', 'customerCode'], transaction: t });
-    const customerCodeToIdMap = new Map(customers.map(c => [c.customerCode, c.id]));
+    const customers = await Customer.findAll({
+      attributes: ['id', 'customerCode'],
+      transaction: t,
+    });
 
-    const importedOrders = [];
+    const map = new Map(customers.map((c) => [c.customerCode, c.id]));
+
+    const imported = [];
     const errors = [];
-    const ordersToCreateOrUpdate = [];
 
-    for (const [index, order] of ordersData.entries()) {
-      const customerId = customerCodeToIdMap.get(order.customer_code); // Używamy snake_case z CSV
+    for (const [idx, row] of ordersData.entries()) {
+      const customerId = map.get(row.customer_code);
+
       if (!customerId) {
-        errors.push({ line: index + 2, message: `Customer with code '${order.customer_code}' not found.` });
+        errors.push({
+          line: idx + 2,
+          message: `Customer '${row.customer_code}' not found.`,
+        });
         continue;
       }
 
-      // Calculate price before inserting
-      const priceResult = await pricingService.calculateOrderPrice({
-        customer_id: customerId, // pricingService oczekuje snake_case
-        senderDetails: order.sender_details,
-        recipientDetails: order.recipient_details,
-        cargoDetails: order.cargo_details,
-        selectedSurcharges: order.selected_surcharges || [],
-        serviceLevel: order.service_level,
-        unloadingStartTime: order.unloading_start_time,
-        unloadingEndTime: order.unloading_end_time,
-      });
-      const updatedCargoDetails = priceResult ? { ...order.cargo_details, priceBreakdown: priceResult.breakdown } : order.cargo_details;
+      const price = await pricingService
+        .calculateOrderPrice({
+          customer_id: customerId,
+          senderDetails: row.sender_details,
+          recipientDetails: row.recipient_details,
+          cargoDetails: row.cargo_details,
+          selectedSurcharges: row.selected_surcharges || [],
+          serviceLevel: row.service_level,
+          unloadingStartTime: row.unloading_start_time,
+          unloadingEndTime: row.unloading_end_time,
+        })
+        .catch(() => null);
 
-      ordersToCreateOrUpdate.push({
+      imported.push({
         customerId,
-        orderNumber: order.order_number,
-        customerReference: order.customer_reference,
-        status: order.status,
-        senderDetails: order.sender_details,
-        recipientDetails: order.recipient_details,
-        cargoDetails: updatedCargoDetails,
-        loadingDateTime: order.loading_date_time,
-        unloadingDateTime: order.unloading_date_time,
-        serviceLevel: order.service_level,
-        selectedSurcharges: order.selected_surcharges || [],
-        calculatedPrice: priceResult ? priceResult.calculatedPrice : null,
-        finalPrice: priceResult ? priceResult.finalPrice : null,
-        unloadingStartTime: order.unloading_start_time || null,
-        unloadingEndTime: order.unloading_end_time || null,
+        orderNumber: row.order_number,
+        customerReference: row.customer_reference,
+        status: row.status,
+        senderDetails: row.sender_details,
+        recipientDetails: row.recipient_details,
+        cargoDetails: {
+          ...row.cargo_details,
+          priceBreakdown: price?.breakdown || null,
+        },
+        loadingDateTime: normalizeDate(row.loading_date_time),
+        unloadingDateTime: normalizeDate(row.unloading_date_time),
+        serviceLevel: row.service_level,
+        selectedSurcharges: row.selected_surcharges || [],
+        calculatedPrice: price?.calculatedPrice || null,
+        finalPrice: price?.finalPrice || null,
+        unloadingStartTime: row.unloading_start_time || null,
+        unloadingEndTime: row.unloading_end_time || null,
       });
     }
 
-    if (ordersToCreateOrUpdate.length > 0) {
-      const createdOrUpdatedOrders = await Order.bulkCreate(ordersToCreateOrUpdate, {
+    const created = await Order.bulkCreate(imported, {
+      transaction: t,
+      updateOnDuplicate: [
+        'customerId',
+        'customerReference',
+        'status',
+        'senderDetails',
+        'recipientDetails',
+        'cargoDetails',
+        'loadingDateTime',
+        'unloadingDateTime',
+        'serviceLevel',
+        'selectedSurcharges',
+        'calculatedPrice',
+        'finalPrice',
+        'unloadingStartTime',
+        'unloadingEndTime',
+      ],
+    });
+
+    for (const order of created) {
+      const price = await pricingService.calculateOrderPrice(order);
+      if (!price?.breakdown?.surcharges?.length) continue;
+
+      await OrderSurcharge.destroy({
+        where: { orderId: order.id },
         transaction: t,
-        updateOnDuplicate: [
-          'customerId', 'customerReference', 'status', 'senderDetails', 'recipientDetails',
-          'cargoDetails', 'loadingDateTime', 'unloadingDateTime', 'serviceLevel',
-          'selectedSurcharges', 'calculatedPrice', 'finalPrice', 'unloadingStartTime', 'unloadingEndTime',
-        ],
       });
-      importedOrders.push(...createdOrUpdatedOrders);
 
-      // Po zaimportowaniu/zaktualizowaniu zleceń, musimy zaktualizować dopłaty
-      for (const order of importedOrders) {
-        // Ponownie oblicz cenę, aby uzyskać aktualne dopłaty
-        const priceResult = await pricingService.calculateOrderPrice(order);
-        if (priceResult?.breakdown?.surcharges?.length > 0) {
-          await OrderSurcharge.destroy({ where: { orderId: order.id }, transaction: t });
-          const surchargesToCreate = priceResult.breakdown.surcharges.map(surcharge => ({
-            orderId: order.id,
-            surchargeTypeId: surcharge.surchargeTypeId,
-            calculatedAmount: surcharge.amount,
-          }));
-          await OrderSurcharge.bulkCreate(surchargesToCreate, { transaction: t });
-        }
-      }
+      await OrderSurcharge.bulkCreate(
+        price.breakdown.surcharges.map((s) => ({
+          orderId: order.id,
+          surchargeTypeId: s.surchargeTypeId,
+          calculatedAmount: s.amount,
+        })),
+        { transaction: t }
+      );
     }
 
-    return { count: importedOrders.length, importedIds: importedOrders.map(o => o.id), errors };
+    return { count: created.length, importedIds: created.map((x) => x.id), errors };
   });
 };
 
-const deleteOrder = async (orderId) => {
-  // `destroy` z `paranoid: true` w modelu wykona soft delete
-  return Order.destroy({ where: { id: orderId } });
-};
+/* ------------------------------------------------------------------
+   DELETE
+------------------------------------------------------------------- */
 
-const bulkDeleteOrders = async (orderIds) => {
-  if (!orderIds || orderIds.length === 0) return 0;
-  return Order.destroy({
-    where: { id: { [Op.in]: orderIds } },
-  });
-};
+const deleteOrder = (id) =>
+  Order.destroy({ where: { id } }); // soft delete (paranoid)
+
+const bulkDeleteOrders = (ids) =>
+  Order.destroy({ where: { id: { [Op.in]: ids } } });
+
+/* ------------------------------------------------------------------
+   EXPORT
+------------------------------------------------------------------- */
 
 module.exports = {
   createOrder,

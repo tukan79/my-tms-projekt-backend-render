@@ -1,7 +1,9 @@
-// server/services/truckService.js (Refactored, SonarQube-friendly)
-
+// server/services/truckService.js
 const { Truck, sequelize } = require('../models');
 const logger = require('../config/logger');
+const Papa = require('papaparse');
+const fs = require('fs');
+const path = require('path');
 
 // --- Helpers -----------------------------------------------------
 
@@ -52,7 +54,7 @@ const createTruck = async (truckData) => {
 const findAllTrucks = async () => {
   try {
     return await Truck.findAll({
-      order: [ ['brand', 'ASC'], ['model', 'ASC'] ],
+      order: [['brand', 'ASC'], ['model', 'ASC']],
     });
   } catch (error) {
     logger.error('Error finding all trucks', { error: error.message });
@@ -64,13 +66,10 @@ const updateTruck = async (truckId, truckData) => {
   const dataToUpdate = normalizeTruckData(truckData);
 
   try {
-    const [updatedRowsCount, updatedTrucks] = await Truck.update(
-      dataToUpdate,
-      {
-        where: { id: truckId },
-        returning: true,
-      }
-    );
+    const [updatedRowsCount, updatedTrucks] = await Truck.update(dataToUpdate, {
+      where: { id: truckId },
+      returning: true,
+    });
 
     return updatedRowsCount > 0 ? updatedTrucks[0] : null;
   } catch (error) {
@@ -85,7 +84,7 @@ const updateTruck = async (truckId, truckData) => {
 
 const deleteTruck = async (truckId) => {
   try {
-    return await Truck.destroy({ where: { id: truckId } }); // Soft delete (paranoid)
+    return await Truck.destroy({ where: { id: truckId } }); // Soft delete if paranoid:true
   } catch (error) {
     logger.error(`Error deleting truck ID ${truckId}`, { error: error.message });
     throw error;
@@ -104,24 +103,39 @@ const importTrucks = async (trucksData) => {
       return { importedCount: 0, importedIds: [] };
     }
 
-    try {
-      const importedTrucks = await Truck.bulkCreate(trucksToCreateOrUpdate, {
-        transaction: t,
-        updateOnDuplicate: [
-          'brand', 'model', 'vin', 'productionYear', 'typeOfTruck',
-          'totalWeight', 'palletCapacity', 'maxPayloadKg', 'isActive'
-        ],
-      });
+    const importedTrucks = await Truck.bulkCreate(trucksToCreateOrUpdate, {
+      transaction: t,
+      updateOnDuplicate: [
+        'brand', 'model', 'vin', 'productionYear', 'typeOfTruck',
+        'totalWeight', 'palletCapacity', 'maxPayloadKg', 'isActive'
+      ],
+    });
 
-      return {
-        importedCount: importedTrucks.length,
-        importedIds: importedTrucks.map(t => t.id)
-      };
-    } catch (error) {
-      logger.error('Error importing trucks', { error: error.message });
-      throw error;
-    }
+    return {
+      importedCount: importedTrucks.length,
+      importedIds: importedTrucks.map(t => t.id)
+    };
   });
+};
+
+// --- Export CSV ----------------------------------------------
+
+const exportTrucksCSV = async (exportDir = path.join(__dirname, '../exports')) => {
+  const trucks = await findAllTrucks();
+  const plainTrucks = trucks.map(t => t.get({ plain: true }));
+  const csv = Papa.unparse(plainTrucks);
+
+  if (!fs.existsSync(exportDir)) {
+    fs.mkdirSync(exportDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `trucks_${timestamp}.csv`;
+  const filePath = path.join(exportDir, filename);
+
+  fs.writeFileSync(filePath, csv, 'utf8');
+
+  return { filePath, filename, exportedCount: plainTrucks.length };
 };
 
 // --- Exports -----------------------------------------------------
@@ -132,4 +146,5 @@ module.exports = {
   updateTruck,
   deleteTruck,
   importTrucks,
+  exportTrucksCSV,
 };
