@@ -9,27 +9,28 @@ const hpp = require('hpp');
 
 const app = express();
 
+// --- CORE MIDDLEWARE ---
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// --- DYNAMIC ORIGINS ---
-const PROD_FRONTEND = process.env.FRONTEND_URL;
+// --- ALLOWED ORIGINS ---
+const PROD_FRONTEND = process.env.FRONTEND_URL;               // przykład: https://my-tms-frontend.com
 const LOCALHOST = process.env.CORS_ALLOW_LOCALHOST || "http://localhost:5173";
 
 const allowedOrigins =
   process.env.NODE_ENV === "production"
-    ? [PROD_FRONTEND]      // tylko produkcja
-    : [LOCALHOST];         // tylko localhost
+    ? [PROD_FRONTEND]
+    : [LOCALHOST];
 
 console.log("🌍 Allowed origins:", allowedOrigins);
 
-// --- CORS ---
+// --- CORS CONFIG ---
 app.use(
   cors({
     origin: (origin, callback) => {
-      // 🔥 pozwalamy na brak origin (np. curl)
+      // brak origin = pozwól (np. Postman, curl)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
@@ -37,15 +38,24 @@ app.use(
       }
 
       console.log("❌ BLOCKED ORIGIN:", origin);
-      callback(new Error("Not allowed by CORS"));
+      return callback(new Error("Not allowed by CORS"));
     },
+
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+
+    // ⭐ pełna obsługa preflight OPTIONS
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+
+    preflightContinue: false,
+    optionsSuccessStatus: 200,
   })
 );
 
-// --- HELMET ---
+// ⭐ globalny preflight
+app.options("*", cors());
+
+// --- SECURITY ---
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -63,5 +73,13 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/runs", require("./routes/runRoutes"));
 app.use("/api/surcharge-types", require("./routes/surchargeTypeRoutes"));
+
+// ⭐ Twoje brakujące routery:
+app.use("/api/assignments", require("./routes/assignmentRoutes"));
+app.use("/api/customers", require("./routes/customerRoutes"));
+app.use("/api/rates", require("./routes/rateRoutes"));
+app.use("/api/zones", require("./routes/zoneRoutes"));
+app.use("/api/trailers", require("./routes/trailerRoutes"));
+app.use("/api/drivers", require("./routes/driverRoutes"));
 
 module.exports = app;
