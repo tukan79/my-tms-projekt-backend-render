@@ -1,3 +1,4 @@
+// server/app.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -19,14 +20,24 @@ app.use(compression());
 // -----------------------------------
 // 2) CORS (MUSI BYĆ PRZED HELMET!)
 // -----------------------------------
-const FRONTEND =
-  process.env.NODE_ENV === "production"
-    ? "https://my-tms-projekt-frontend.onrender.com"
-    : "http://localhost:5173";
 
+// 👉 DWA FRONTENDY — localhost + produkcyjny
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "https://my-tms-projekt-frontend.onrender.com",
+];
+
+// pozwalamy tylko jeśli origin jest na liście
 app.use(
   cors({
-    origin: FRONTEND,
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("🚫 BLOCKED CORS ORIGIN:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
@@ -62,6 +73,6 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/runs", require("./routes/runRoutes"));
 app.use("/api/surcharge-types", require("./routes/surchargeTypeRoutes"));
-// ...reszta Twoich tras
+// ... dodaj resztę tras
 
 module.exports = app;
