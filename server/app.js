@@ -41,48 +41,47 @@ app.use(express.json({ limit: '10mb' }));
 app.use(helmet());
 app.use(hpp());
 
-// === CORS KONFIGURACJA ===
-
-// Wszystkie dopuszczalne domeny
+// === CORS CONFIG (FIXED FOR COOKIES) ===
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://my-tms-project-frontend.vercel.app', // Twoja domena Vercel
-  'https://my-tms-projekt-frontend.onrender.com', // Nowa domena na Render
+  'https://my-tms-project-frontend.vercel.app',
+  'https://my-tms-projekt-frontend.onrender.com',
 ];
 
-// CORS opcje (działające z cookies)
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Zezwalaj na żądania bez 'origin' (np. z Postmana, testów serwerowych)
-      // LUB gdy 'origin' jest na liście dozwolonych
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, origin); // Zwróć konkretny origin zamiast 'true'
-      } else {
-        logger.warn(`CORS blocked request from unallowed origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+      // pozwalamy na brak origin (Postman, serwery backendowe)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, origin);
       }
+
+      logger.warn(`❌ CORS blocked request from unallowed origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     },
-    credentials: true, // bardzo ważne dla cookies
+    credentials: true, // wymagane dla cookies
+    optionsSuccessStatus: 200,
   })
 );
 
 // === RATE LIMITING ===
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minut
-  max: process.env.NODE_ENV === 'production' ? 1000 : 5000, // Mniej w produkcji
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 1000 : 5000,
+  message: { error: 'Too many requests from this IP, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api', apiLimiter);
 
-// Bardziej restrykcyjny limiter dla endpointów autoryzacji
+// === AUTH LIMITER ===
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minut
+  windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 20 : 100,
-  message: { error: 'Too many authentication attempts, please try again after 15 minutes' },
+  message: { error: 'Too many authentication attempts' },
   standardHeaders: true,
   legacyHeaders: false,
 });
