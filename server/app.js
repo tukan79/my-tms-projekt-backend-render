@@ -22,7 +22,7 @@ const LOCALHOST = process.env.CORS_ALLOW_LOCALHOST || "http://localhost:5173";
 
 const allowedOrigins =
   process.env.NODE_ENV === "production"
-    ? [PROD_FRONTEND]
+    ? [PROD_FRONTEND, LOCALHOST]
     : [LOCALHOST];
 
 console.log("🌍 Allowed origins:", allowedOrigins);
