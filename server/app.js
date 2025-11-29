@@ -9,6 +9,7 @@ const hpp = require('hpp');
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // --- CORE MIDDLEWARE ---
 app.use(cookieParser());
@@ -17,13 +18,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
 // --- ALLOWED ORIGINS ---
-const PROD_FRONTEND = process.env.FRONTEND_URL;           // np. https://my-tms-project-frontend.vercel.app
+const DEFAULT_FRONTEND =
+  process.env.FRONTEND_URL ||
+  process.env.CLIENT_URL ||
+  "https://my-tms-projekt-frontend.vercel.app";
 const LOCALHOST = process.env.CORS_ALLOW_LOCALHOST || "http://localhost:5173";
 
-const allowedOrigins =
-  process.env.NODE_ENV === "production"
-    ? [PROD_FRONTEND, LOCALHOST]
-    : [LOCALHOST];
+const allowedOrigins = Array.from(
+  new Set(
+    (process.env.NODE_ENV === "production"
+      ? [DEFAULT_FRONTEND, LOCALHOST]
+      : [LOCALHOST, DEFAULT_FRONTEND]
+    ).filter(Boolean)
+  )
+);
 
 console.log("🌍 Allowed origins:", allowedOrigins);
 
@@ -76,6 +84,10 @@ app.use("/api/zones", require("./routes/postcodeZoneRoutes"));        // poprawi
 app.use("/api/trailers", require("./routes/trailerRoutes"));
 app.use("/api/drivers", require("./routes/driverRoutes"));
 app.use("/api/rate-cards", require("./routes/rateCardRoutes"));      // zamiast nieistniejącego rateRoutes
+app.use("/api/orders", require("./routes/orderRoutes"));
+app.use("/api/invoices", require("./routes/invoiceRoutes"));
+app.use("/api/users", require("./routes/userRoutes"));
+app.use("/api/trucks", require("./routes/truckRoutes"));
 
 // === Catch-all dla nieznanych tras ===
 app.use((req, res, next) => {

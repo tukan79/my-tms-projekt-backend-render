@@ -1,9 +1,9 @@
 // server/config/corsOptions.js
 
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "http://localhost:5173",
   "https://my-tms-projekt-frontend.onrender.com", //
-];
+]);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -11,7 +11,7 @@ app.use(cors({
 
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.has(origin)) {
       return callback(null, true);
     }
 

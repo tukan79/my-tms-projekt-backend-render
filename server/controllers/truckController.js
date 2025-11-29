@@ -1,111 +1,83 @@
-// Plik: server/services/truckService.js
-const { Truck, sequelize } = require('../models');
+// server/controllers/truckController.js
+const truckService = require('../services/truckService.js');
 
-/**
- * Pobiera wszystkie pojazdy przypisane do firmy użytkownika
- */
-const findTrucksByCompany = async (companyId = null) => {
-  // Możesz dodać filtr po companyId jeśli modele to wspierają
-  return Truck.findAll({
-    order: [['registrationPlate', 'ASC']],
-  });
-};
-
-/**
- * Tworzy nowy pojazd
- */
-const createTruck = async (truckData) => {
-  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truckData;
-
-  if (!registrationPlate || !brand) {
-    throw new Error('Numer rejestracyjny i marka są wymagane.');
+const getAllTrucks = async (req, res, next) => {
+  try {
+    const trucks = await truckService.findAllTrucks();
+    res.status(200).json(trucks || []);
+  } catch (error) {
+    next(error);
   }
-
-  return Truck.create({
-    registrationPlate,
-    brand,
-    model: model || null,
-    capacityKg: capacityKg || null,
-  });
 };
 
-/**
- * Aktualizuje istniejący pojazd
- */
-const updateTruck = async (truckId, truckData) => {
-  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truckData;
+const createTruck = async (req, res, next) => {
+  try {
+    const { registration_plate, brand, model, capacity_kg } = req.body;
+    if (!registration_plate || !brand) {
+      return res.status(400).json({ error: 'registration_plate and brand are required.' });
+    }
 
-  const [updatedCount, updatedTrucks] = await Truck.update(
-    {
-      registrationPlate,
+    const newTruck = await truckService.createTruck({
+      registration_plate,
       brand,
-      model: model || null,
-      capacityKg: capacityKg || null,
-    },
-    {
-      where: { id: truckId },
-      returning: true,
-    }
-  );
-
-  return updatedCount > 0 ? updatedTrucks[0] : null;
-};
-
-/**
- * Usuwa pojazd
- */
-const deleteTruck = async (truckId) => {
-  // Jeśli model ma paranoid: true, będzie to soft delete
-  return Truck.destroy({
-    where: { id: truckId },
-  });
-};
-
-/**
- * Import wielu pojazdów (bulk) w ramach transakcji
- */
-const importTrucks = async (truckArray) => {
-  if (!Array.isArray(truckArray) || truckArray.length === 0) {
-    throw new Error('Invalid input: array of trucks required.');
+      model,
+      capacity_kg,
+    });
+    res.status(201).json(newTruck);
+  } catch (error) {
+    next(error);
   }
+};
 
-  return sequelize.transaction(async (t) => {
-    let importedCount = 0;
-    const errors = [];
+const updateTruck = async (req, res, next) => {
+  try {
+    const { truckId } = req.params;
+    const updatedTruck = await truckService.updateTruck(truckId, req.body);
+    if (!updatedTruck) return res.status(404).json({ error: 'Truck not found.' });
+    res.status(200).json(updatedTruck);
+  } catch (error) {
+    next(error);
+  }
+};
 
-    for (const [index, truck] of truckArray.entries()) {
-      try {
-        const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = truck;
+const deleteTruck = async (req, res, next) => {
+  try {
+    const { truckId } = req.params;
+    const deletedCount = await truckService.deleteTruck(truckId);
+    if (deletedCount === 0) return res.status(404).json({ error: 'Truck not found.' });
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
 
-        if (!registrationPlate || !brand) {
-          errors.push(`Row ${index + 1}: registrationPlate and brand are required.`);
-          continue;
-        }
-
-        await Truck.upsert(
-          {
-            registrationPlate,
-            brand,
-            model: model || null,
-            capacityKg: capacityKg || null,
-          },
-          { transaction: t }
-        );
-
-        importedCount++;
-      } catch (err) {
-        errors.push(`Row ${index + 1}: ${err.message}`);
-      }
+const importTrucks = async (req, res, next) => {
+  try {
+    const { trucks } = req.body;
+    if (!Array.isArray(trucks) || trucks.length === 0) {
+      return res.status(400).json({ error: 'Field "trucks" must be a non-empty array.' });
     }
+    const importResult = await truckService.importTrucks(trucks);
+    res.status(201).json(importResult);
+  } catch (error) {
+    next(error);
+  }
+};
 
-    return { importedCount, errors };
-  });
+const exportTrucks = async (req, res, next) => {
+  try {
+    const { filePath, filename, exportedCount } = await truckService.exportTrucksCSV();
+    res.status(200).json({ filePath, filename, exportedCount });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {
-  findTrucksByCompany,
+  getAllTrucks,
   createTruck,
   updateTruck,
   deleteTruck,
   importTrucks,
+  exportTrucks,
 };

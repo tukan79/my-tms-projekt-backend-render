@@ -17,7 +17,7 @@ exports.createInvoice = async (req, res, next) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       return res.status(400).json({
         error: 'startDate and endDate must be valid ISO date strings.',
       });
@@ -39,7 +39,7 @@ exports.createInvoice = async (req, res, next) => {
 exports.getAllInvoices = async (req, res, next) => {
   try {
     const invoices = await invoiceService.findAllInvoices();
-    res.json({ invoices: invoices || [] });
+    res.status(200).json(invoices || []);
   } catch (error) {
     next(error);
   }

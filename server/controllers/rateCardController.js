@@ -17,7 +17,7 @@ const safeLogSample = (label, obj) => {
   try {
     logger.debug(label, { sample: obj });
   } catch (e) {
-    // swallow logging errors
+    logger.warn('Logging sample failed', { label, error: e.message });
   }
 };
 

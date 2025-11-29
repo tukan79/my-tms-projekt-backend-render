@@ -1,6 +1,10 @@
 // server/services/surchargeTypeService.js
 const { SurchargeType } = require('../models');
 
+let surchargeCache = null;
+let cacheExpiresAt = 0;
+const CACHE_TTL_MS = 30 * 1000;
+
 /**
  * Standardized logging helper for service
  */
@@ -18,11 +22,19 @@ const logService = (level, context, message, data = null) => {
 const findAll = async () => {
   const ctx = 'findAll';
   try {
+    const now = Date.now();
+    if (surchargeCache && cacheExpiresAt > now) {
+      logService('INFO', ctx, 'Returning surcharge types from cache', { count: surchargeCache.length });
+      return surchargeCache;
+    }
+
     logService('INFO', ctx, 'Fetching all surcharge types');
     const items = await SurchargeType.findAll({
       order: [['name', 'ASC']],
     });
     logService('INFO', ctx, `Fetched ${items.length} surcharge types`);
+    surchargeCache = items;
+    cacheExpiresAt = now + CACHE_TTL_MS;
     return items;
   } catch (error) {
     logService('ERROR', ctx, 'Error fetching surcharge types', { error: error.message });
@@ -60,6 +72,8 @@ const create = async (surchargeData) => {
     });
 
     logService('INFO', ctx, 'Surcharge type created', { id: newItem.id });
+    surchargeCache = null;
+    cacheExpiresAt = 0;
     return newItem;
   } catch (error) {
     logService('ERROR', ctx, 'Error creating surcharge type', { error: error.message, body: surchargeData });
@@ -108,6 +122,8 @@ const update = async (id, surchargeData) => {
     }
 
     logService('INFO', ctx, 'Surcharge type updated', { id: updatedItems[0].id });
+    surchargeCache = null;
+    cacheExpiresAt = 0;
     return updatedItems[0];
   } catch (error) {
     logService('ERROR', ctx, 'Error updating surcharge type', { id, error: error.message });
@@ -127,6 +143,8 @@ const deleteById = async (id) => {
       logService('INFO', ctx, 'Surcharge type deleted', { id });
     }
 
+    surchargeCache = null;
+    cacheExpiresAt = 0;
     return deletedCount;
   } catch (error) {
     logService('ERROR', ctx, 'Error deleting surcharge type', { id, error: error.message });

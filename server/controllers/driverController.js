@@ -2,8 +2,8 @@
 
 const driverService = require('../services/driverService.js');
 const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const allowedDriverFields = [
   'first_name',
@@ -37,7 +37,7 @@ exports.exportDrivers = async (req, res, next) => {
     const drivers = await driverService.findDriversByCompany();
     const csv = Papa.unparse(drivers.map(d => d.get({ plain: true })));
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filename = `drivers_${timestamp}.csv`;
     const exportsDir = path.join(__dirname, '../exports');
 

@@ -112,11 +112,12 @@ const updateUser = async (userId, userData) => {
     }
   );
 
-  if (updatedRowsCount > 0) {
-    const { passwordHash: _, ...userWithoutPassword } = updatedUsers[0].get({ plain: true });
-    return userWithoutPassword;
+  if (updatedRowsCount === 0) {
+    return null;
   }
-  return null;
+
+  const { passwordHash: _passwordHash, ...userWithoutPassword } = updatedUsers[0].get({ plain: true });
+  return userWithoutPassword;
 };
 
 const deleteUser = async (userId) => {

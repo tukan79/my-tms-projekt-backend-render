@@ -95,7 +95,7 @@ const createOrder = async (orderData) => {
       priceBreakdown: price?.breakdown || null,
     };
 
-    const [_, updated] = await Order.update(
+    const [, updated] = await Order.update(
       {
         calculatedPrice: price?.calculatedPrice || null,
         finalPrice: price?.finalPrice || null,

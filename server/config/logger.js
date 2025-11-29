@@ -10,7 +10,10 @@ const logFormat = printf(({ level, message, timestamp: ts, stack, ...meta }) => 
   // Jeśli istnieje stack trace, użyj go; w przeciwnym razie użyj samej wiadomości.
   const logMessage = stack || message;
 
-  return `${ts} ${level}: ${logMessage} ${metaString}`;
+  const tsString = typeof ts === 'string' ? ts : JSON.stringify(ts);
+  const msgString = typeof logMessage === 'string' ? logMessage : JSON.stringify(logMessage);
+
+  return `${tsString} ${level}: ${msgString} ${metaString}`;
 });
 
 const logger = createLogger({

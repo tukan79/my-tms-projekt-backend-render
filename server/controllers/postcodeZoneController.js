@@ -1,8 +1,8 @@
 // Plik: server/controllers/postcodeZoneController.js
 const zoneService = require('../services/postcodeZoneService.js');
 const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 /* ============================================================================
    GET ALL ZONES
@@ -97,7 +97,7 @@ exports.exportZones = async (req, res, next) => {
     const csv = Papa.unparse(dataToExport);
 
     // Unikalna nazwa pliku
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filename = `postcode_zones_${timestamp}.csv`;
 
     // Katalog exports

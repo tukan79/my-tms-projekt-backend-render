@@ -42,19 +42,15 @@ const parsePrice = (price) => {
   const s = String(price).trim();
   if (s === '') return 0;
   // remove currency symbols and spaces
-  const cleaned = s.replace(/[^\d,.-]/g, '');
+  const cleaned = s.replaceAll(/[^\d,.-]/g, '');
   // if contains both '.' and ',' assume '.' is decimal if '.' appears right-most
   // Simpler approach: replace comma with dot, but handle "1.234,56" -> "1234.56"
   const lastDot = cleaned.lastIndexOf('.');
   const lastComma = cleaned.lastIndexOf(',');
-  let normalized = cleaned;
-  if (lastComma > lastDot) {
-    // comma is decimal separator (e.g. "1.234,56")
-    normalized = cleaned.replace(/\./g, '').replace(',', '.');
-  } else {
-    // dot is decimal or no separators (e.g. "1,234.56" or "1234.56")
-    normalized = cleaned.replace(/,/g, '');
-  }
+  const normalized =
+    lastComma > lastDot
+      ? cleaned.replaceAll('.', '').replaceAll(',', '.')
+      : cleaned.replaceAll(',', '');
 
   const n = Number.parseFloat(normalized);
   return Number.isNaN(n) ? 0 : n;
@@ -64,12 +60,104 @@ const parsePrice = (price) => {
  * Pick first existing key from object
  */
 const findValueByKeys = (obj = {}, keys = []) => {
-  for (const k of keys) {
-    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
-      return obj[k];
-    }
+  const key = keys.find((k) => obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '');
+  if (key === undefined) {
+    return undefined;
   }
-  return undefined;
+  return obj[key];
+};
+
+/**
+ * Normalize one raw import row into a RateEntry payload or return a skip/error reason.
+ */
+const normalizeImportEntry = (raw, index, zoneMap, processedKeys, rateCardId) => {
+  const rowNumber = index + 1;
+
+  const rawZone = findValueByKeys(raw, ['Zone Name', 'zone_name', 'zoneName']) || '';
+  const zoneKey = String(rawZone).trim().toLowerCase();
+  if (zoneKey.length === 0) {
+    return { error: `Row ${rowNumber}: missing zone name` };
+  }
+
+  const zoneId = zoneMap.get(zoneKey);
+  if (zoneId === undefined) {
+    return { error: `Row ${rowNumber}: zone "${rawZone}" not found` };
+  }
+
+  let rateTypeRaw = (findValueByKeys(raw, ['Rate Type', 'rate_type', 'rateType']) || 'delivery')
+    .toString()
+    .trim()
+    .toLowerCase();
+  if (['standart', 'standard'].includes(rateTypeRaw)) rateTypeRaw = 'delivery';
+  rateTypeRaw = rateTypeRaw === 'collection' ? 'collection' : 'delivery';
+
+  const serviceLevel = (findValueByKeys(raw, ['Service Level', 'service_level', 'serviceLevel']) || 'A')
+    .toString()
+    .trim();
+  const uniqueKey = `${zoneId}::${serviceLevel}::${rateTypeRaw}`;
+  if (processedKeys.has(uniqueKey)) {
+    return { skipped: true };
+  }
+
+  const priceFields = {
+    priceMicro: parsePrice(findValueByKeys(raw, ['Price Micro', 'price_micro', 'priceMicro'])),
+    priceQuarter: parsePrice(findValueByKeys(raw, ['Price Quarter', 'price_quarter', 'priceQuarter'])),
+    priceHalf: parsePrice(findValueByKeys(raw, ['Price Half', 'price_half', 'priceHalf'])),
+    priceHalfPlus: parsePrice(findValueByKeys(raw, ['Price Half Plus', 'Price Plus Half', 'price_half_plus', 'priceHalfPlus'])),
+    priceFull1: parsePrice(findValueByKeys(raw, ['Price Full 1', 'price_full_1', 'priceFull1'])),
+    priceFull2: parsePrice(findValueByKeys(raw, ['Price Full 2', 'price_full_2', 'priceFull2'])),
+    priceFull3: parsePrice(findValueByKeys(raw, ['Price Full 3', 'price_full_3', 'priceFull3'])),
+    priceFull4: parsePrice(findValueByKeys(raw, ['Price Full 4', 'price_full_4', 'priceFull4'])),
+    priceFull5: parsePrice(findValueByKeys(raw, ['Price Full 5', 'price_full_5', 'priceFull5'])),
+    priceFull6: parsePrice(findValueByKeys(raw, ['Price Full 6', 'price_full_6', 'priceFull6'])),
+    priceFull7: parsePrice(findValueByKeys(raw, ['Price Full 7', 'price_full_7', 'priceFull7'])),
+    priceFull8: parsePrice(findValueByKeys(raw, ['Price Full 8', 'price_full_8', 'priceFull8'])),
+    priceFull9: parsePrice(findValueByKeys(raw, ['Price Full 9', 'price_full_9', 'priceFull9'])),
+    priceFull10: parsePrice(findValueByKeys(raw, ['Price Full 10', 'price_full_10', 'priceFull10'])),
+  };
+
+  return {
+    entry: {
+      rateCardId,
+      rateType: rateTypeRaw,
+      zoneId,
+      serviceLevel,
+      ...priceFields,
+    },
+    uniqueKey,
+  };
+};
+
+const processRateEntries = (entries, zoneMap, rateCardId) => {
+  const processedKeys = new Set();
+  const entriesToCreate = [];
+  let skipped = 0;
+  const errors = [];
+
+  entries.forEach((raw, index) => {
+    try {
+      const normalized = normalizeImportEntry(raw, index, zoneMap, processedKeys, rateCardId);
+
+      if (normalized.error) {
+        errors.push(normalized.error);
+        skipped++;
+        return;
+      }
+
+      if (normalized.skipped) {
+        skipped++;
+        return;
+      }
+
+      entriesToCreate.push(normalized.entry);
+      if (normalized.uniqueKey) processedKeys.add(normalized.uniqueKey);
+    } catch (error_) {
+      errors.push(`Row ${index + 1}: ${error_.message}`);
+      skipped++;
+    }
+  });
+
+  return { entriesToCreate, skipped, errors };
 };
 
 /* ---------------------------
@@ -92,7 +180,7 @@ const findRateCardByCustomerId = async (customerId) => {
       include: [{ model: RateCard, as: 'rateCard' }],
     });
 
-    if (!assign || !assign.rateCard) {
+    if (!assign?.rateCard) {
       log('info', ctx, 'No rate card assignment', { customerId: id });
       return null;
     }
@@ -179,77 +267,7 @@ const importRateEntries = async (rateCardId, entries = []) => {
         if (key) zoneMap.set(key, z.id);
       }
 
-      const processedKeys = new Set();
-      const entriesToCreate = [];
-      let skipped = 0;
-      const errors = [];
-
-      for (let i = 0; i < entries.length; i++) {
-        const raw = entries[i];
-
-        try {
-          // flexible zone name extraction (try different possible keys)
-          const rawZone = findValueByKeys(raw, ['Zone Name', 'zone_name', 'zoneName']) || '';
-          const zoneKey = String(rawZone).trim().toLowerCase();
-
-          if (!zoneKey) {
-            errors.push(`Row ${i + 1}: missing zone name`);
-            skipped++;
-            continue;
-          }
-
-          const zoneId = zoneMap.get(zoneKey);
-          if (!zoneId) {
-            errors.push(`Row ${i + 1}: zone "${rawZone}" not found`);
-            skipped++;
-            continue;
-          }
-
-          // Rate type normalization
-          let rateTypeRaw = (findValueByKeys(raw, ['Rate Type', 'rate_type', 'rateType']) || 'delivery').toString().trim().toLowerCase();
-          if (['standart', 'standard'].includes(rateTypeRaw)) rateTypeRaw = 'delivery';
-          rateTypeRaw = rateTypeRaw === 'collection' ? 'collection' : 'delivery';
-
-          const serviceLevel = (findValueByKeys(raw, ['Service Level', 'service_level', 'serviceLevel']) || 'A').toString().trim();
-          const uniqueKey = `${zoneId}::${serviceLevel}::${rateTypeRaw}`;
-          if (processedKeys.has(uniqueKey)) {
-            skipped++;
-            continue;
-          }
-
-          // Collect prices using flexible key names
-          const priceFields = {
-            priceMicro: parsePrice(findValueByKeys(raw, ['Price Micro', 'price_micro', 'priceMicro'])),
-            priceQuarter: parsePrice(findValueByKeys(raw, ['Price Quarter', 'price_quarter', 'priceQuarter'])),
-            priceHalf: parsePrice(findValueByKeys(raw, ['Price Half', 'price_half', 'priceHalf'])),
-            priceHalfPlus: parsePrice(findValueByKeys(raw, ['Price Half Plus', 'Price Plus Half', 'price_half_plus', 'priceHalfPlus'])),
-            priceFull1: parsePrice(findValueByKeys(raw, ['Price Full 1', 'price_full_1', 'priceFull1'])),
-            priceFull2: parsePrice(findValueByKeys(raw, ['Price Full 2', 'price_full_2', 'priceFull2'])),
-            priceFull3: parsePrice(findValueByKeys(raw, ['Price Full 3', 'price_full_3', 'priceFull3'])),
-            priceFull4: parsePrice(findValueByKeys(raw, ['Price Full 4', 'price_full_4', 'priceFull4'])),
-            priceFull5: parsePrice(findValueByKeys(raw, ['Price Full 5', 'price_full_5', 'priceFull5'])),
-            priceFull6: parsePrice(findValueByKeys(raw, ['Price Full 6', 'price_full_6', 'priceFull6'])),
-            priceFull7: parsePrice(findValueByKeys(raw, ['Price Full 7', 'price_full_7', 'priceFull7'])),
-            priceFull8: parsePrice(findValueByKeys(raw, ['Price Full 8', 'price_full_8', 'priceFull8'])),
-            priceFull9: parsePrice(findValueByKeys(raw, ['Price Full 9', 'price_full_9', 'priceFull9'])),
-            priceFull10: parsePrice(findValueByKeys(raw, ['Price Full 10', 'price_full_10', 'priceFull10'])),
-          };
-
-          entriesToCreate.push({
-            rateCardId: rcid,
-            rateType: rateTypeRaw,
-            zoneId,
-            serviceLevel,
-            ...priceFields,
-          });
-
-          processedKeys.add(uniqueKey);
-        } catch (rowErr) {
-          errors.push(`Row ${i + 1}: ${rowErr.message}`);
-          skipped++;
-          // continue processing other rows
-        }
-      }
+      const { entriesToCreate, skipped, errors } = processRateEntries(entries, zoneMap, rcid);
 
       let createdCount = 0;
       if (entriesToCreate.length > 0) {

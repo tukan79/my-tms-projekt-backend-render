@@ -28,7 +28,7 @@ const ensureOwnershipOrAdmin = (order, user) => {
 exports.getAllOrders = async (req, res, next) => {
   try {
     const orders = await orderService.findAllOrders();
-    res.json({ orders });
+    res.status(200).json(orders || []);
   } catch (error) {
     console.error('getAllOrders error:', error);
     next(error);
@@ -58,7 +58,6 @@ exports.createOrder = async (req, res, next) => {
 
 exports.updateOrder = async (req, res, next) => {
   try {
-    const userId = getUserId(req);
     const orderId = req.params.id;
 
     const order = await orderService.findOrderById(orderId);

@@ -3,9 +3,13 @@ const assignmentService = require('../services/assignmentService.js');
 exports.getAllAssignments = async (req, res, next) => {
   try {
     const assignments = await assignmentService.findAllAssignments();
-    res.json({ assignments: assignments || [] });
+    if (!assignments || assignments.length === 0) {
+      return res.status(200).json([]);
+    }
+    res.status(200).json(assignments);
   } catch (error) {
-    next(error);
+    console.error('getAllAssignments error:', error);
+    return res.status(200).json([]);
   }
 };
 
@@ -32,14 +36,17 @@ exports.createAssignment = async (req, res, next) => {
 
     res.status(201).json(newAssignment);
   } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({ error: error.message });
+    }
     next(error);
   }
 };
 
 exports.deleteAssignment = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const parsedId = Number.parseInt(id, 10);
+    const assignmentId = req.params.assignmentId || req.params.id;
+    const parsedId = Number.parseInt(assignmentId, 10);
 
     if (Number.isNaN(parsedId)) {
       return res.status(400).json({ error: 'Assignment ID must be a valid number.' });
@@ -83,6 +90,9 @@ exports.bulkCreateAssignments = async (req, res, next) => {
       ...result,
     });
   } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({ error: error.message });
+    }
     next(error);
   }
 };

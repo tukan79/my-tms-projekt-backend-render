@@ -17,7 +17,7 @@ const toSnakeCaseUser = (user) => {
 const getAllUsers = async (req, res, next) => {
   try {
     const users = await userService.findAllUsers();
-    res.status(200).json({ users: users ? users.map(toSnakeCaseUser) : [] });
+    res.status(200).json(users ? users.map(toSnakeCaseUser) : []);
   } catch (error) {
     next(error);
   }

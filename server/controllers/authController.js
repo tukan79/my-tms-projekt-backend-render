@@ -3,6 +3,15 @@ const { body, validationResult } = require('express-validator');
 const userService = require('../services/userService.js');
 const authService = require('../services/authService.js');
 
+const REFRESH_COOKIE_NAME = 'refreshToken';
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
+
 /**
  * Walidacja danych dla rejestracji
  */
@@ -47,7 +56,10 @@ const register = async (req, res, next) => {
     const tokens = await authService.generateTokens(newUser);
 
     const { passwordHash, ...userData } = newUser.get({ plain: true });
-    res.status(201).json({ user: userData, ...tokens });
+    res
+      .cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, refreshCookieOptions)
+      .status(201)
+      .json({ user: userData, ...tokens });
   } catch (error) {
     next(error);
   }
@@ -69,7 +81,10 @@ const login = async (req, res, next) => {
     const tokens = await authService.generateTokens(user);
     const { passwordHash, ...userData } = user.get({ plain: true });
 
-    res.status(200).json({ user: userData, ...tokens });
+    res
+      .cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, refreshCookieOptions)
+      .status(200)
+      .json({ user: userData, ...tokens });
   } catch (error) {
     next(error);
   }
@@ -80,7 +95,10 @@ const login = async (req, res, next) => {
  */
 const logout = async (req, res, next) => {
   try {
-    const refreshToken = req.body.refreshToken || req.headers['x-refresh-token'];
+    const refreshToken =
+      req.cookies?.[REFRESH_COOKIE_NAME] ||
+      req.body.refreshToken ||
+      req.headers['x-refresh-token'];
     if (!refreshToken) return res.status(400).json({ error: 'Refresh token is required' });
 
     const user = await userService.findUserByRefreshToken(refreshToken);
@@ -88,7 +106,10 @@ const logout = async (req, res, next) => {
       await userService.updateUserRefreshToken(user.id, null); // usuń token z bazy
     }
 
-    res.status(200).json({ message: 'Successfully logged out' });
+    res
+      .clearCookie(REFRESH_COOKIE_NAME, { ...refreshCookieOptions, maxAge: undefined })
+      .status(200)
+      .json({ message: 'Successfully logged out' });
   } catch (error) {
     next(error);
   }
@@ -99,15 +120,27 @@ const logout = async (req, res, next) => {
  */
 const refreshToken = async (req, res, next) => {
   try {
-    const { refreshToken: oldRefreshToken } = req.body;
-    if (!oldRefreshToken) return res.status(400).json({ error: 'Refresh token is required' });
+    const oldRefreshToken =
+      req.cookies?.[REFRESH_COOKIE_NAME] ||
+      req.body.refreshToken ||
+      req.headers['x-refresh-token'];
+
+    if (!oldRefreshToken) {
+      return res.status(401).json({ error: 'Refresh token is required' });
+    }
 
     const user = await userService.findUserByRefreshToken(oldRefreshToken);
-    if (!user) return res.status(401).json({ error: 'Invalid refresh token' });
+    if (!user) return res.status(401).json({ error: 'Invalid or expired refresh token' });
 
     const tokens = await authService.rotateTokens(user);
-    res.status(200).json(tokens);
+    res
+      .cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, refreshCookieOptions)
+      .status(200)
+      .json(tokens);
   } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Refresh token expired' });
+    }
     next(error);
   }
 };

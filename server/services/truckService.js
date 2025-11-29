@@ -2,8 +2,8 @@
 const { Truck, sequelize } = require('../models');
 const logger = require('../config/logger');
 const Papa = require('papaparse');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // --- Helpers -----------------------------------------------------
 
@@ -129,7 +129,7 @@ const exportTrucksCSV = async (exportDir = path.join(__dirname, '../exports')) =
     fs.mkdirSync(exportDir, { recursive: true });
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
   const filename = `trucks_${timestamp}.csv`;
   const filePath = path.join(exportDir, filename);
 

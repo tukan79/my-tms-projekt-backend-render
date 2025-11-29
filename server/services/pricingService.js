@@ -159,29 +159,11 @@ async function findRateEntries(rateCardId, types, zones, order) {
 // PRICING LOGIC
 // ============================================================================
 async function priceLocal(order, zones, rateCardId) {
-    const entries = await findRateEntries(
-        rateCardId,
-        [RATE_TYPES.DELIVERY],
-        [zones.destZone.id],
-        order
-    );
-
-    return entries.length
-        ? convertToResult(entries[0])
-        : emptyPrice();
+    return priceSingleLeg(rateCardId, [RATE_TYPES.DELIVERY], zones.destZone.id, order);
 }
 
 async function priceStandardCollection(order, zones, rateCardId) {
-    const entries = await findRateEntries(
-        rateCardId,
-        [RATE_TYPES.DELIVERY],
-        [zones.destZone.id],
-        order
-    );
-
-    return entries.length
-        ? convertToResult(entries[0])
-        : emptyPrice();
+    return priceSingleLeg(rateCardId, [RATE_TYPES.DELIVERY], zones.destZone.id, order);
 }
 
 async function priceStandardDelivery(order, zones, rateCardId) {
@@ -217,6 +199,12 @@ async function priceP2P(order, zones, rateCardId) {
 // ============================================================================
 // RESULT HELPERS
 // ============================================================================
+
+async function priceSingleLeg(rateCardId, rateTypes, zoneId, order) {
+    const entries = await findRateEntries(rateCardId, rateTypes, [zoneId], order);
+    return entries.length ? convertToResult(entries[0]) : emptyPrice();
+}
+
 function convertToResult(entry) {
     return {
         total: Number(entry.price || 0),
