@@ -72,7 +72,8 @@ exports.deleteZone = async (req, res, next) => {
     const deletedCount = await zoneService.deleteZone(zoneId);
 
     if (deletedCount === 0) {
-      return res.status(404).json({ error: 'Zone not found.' });
+      // Idempotent delete: return 204 even if nothing was removed
+      return res.status(204).json({ message: 'Zone already deleted or not found.' });
     }
 
     res.status(204).send();

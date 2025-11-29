@@ -84,6 +84,7 @@ app.use("/api/zones", require("./routes/postcodeZoneRoutes"));        // poprawi
 app.use("/api/trailers", require("./routes/trailerRoutes"));
 app.use("/api/drivers", require("./routes/driverRoutes"));
 app.use("/api/rate-cards", require("./routes/rateCardRoutes"));      // zamiast nieistniejącego rateRoutes
+app.use("/api/feedback", require("./routes/feedbackRoutes"));
 app.use("/api/orders", require("./routes/orderRoutes"));
 app.use("/api/invoices", require("./routes/invoiceRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
