@@ -116,7 +116,8 @@ const updateUser = async (userId, userData) => {
     return null;
   }
 
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = updatedUsers[0].get({ plain: true });
+  const userWithoutPassword = updatedUsers[0].get({ plain: true });
+  delete userWithoutPassword.passwordHash;
   return userWithoutPassword;
 };
 
