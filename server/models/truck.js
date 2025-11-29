@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineTruckModel = (sequelize, DataTypes) => {
   class Truck extends Model {
     static associate(models) {
       // Pojazd może być przypisany do wielu przejazdów (Runs)
@@ -54,3 +54,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return Truck;
 };
+
+module.exports = defineTruckModel;

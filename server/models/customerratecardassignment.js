@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineCustomerRateCardAssignmentModel = (sequelize, DataTypes) => {
   class CustomerRateCardAssignment extends Model {
     static associate(models) {
       CustomerRateCardAssignment.belongsTo(models.Customer, {
@@ -34,3 +34,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return CustomerRateCardAssignment;
 };
+
+module.exports = defineCustomerRateCardAssignmentModel;

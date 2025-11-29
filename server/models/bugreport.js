@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineBugReportModel = (sequelize, DataTypes) => {
   class BugReport extends Model {
     static associate(models) {
       // Zgłoszenie błędu należy do jednego użytkownika (User)
@@ -41,3 +41,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return BugReport;
 };
+
+module.exports = defineBugReportModel;

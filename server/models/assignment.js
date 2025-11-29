@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineAssignmentModel = (sequelize, DataTypes) => {
   class Assignment extends Model {
     static associate(models) {
       // Przypisanie należy do jednego zlecenia (Order)
@@ -42,3 +42,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return Assignment;
 };
+
+module.exports = defineAssignmentModel;

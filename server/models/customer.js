@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineCustomerModel = (sequelize, DataTypes) => {
   class Customer extends Model {
     static associate(models) {
       // Klient (Customer) może mieć wiele zleceń (Orders)
@@ -90,3 +90,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return Customer;
 };
+
+module.exports = defineCustomerModel;

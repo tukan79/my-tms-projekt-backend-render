@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Sequelize = require('sequelize');
-const process = require('process');
+const process = require('node:process');
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || 'development';
 const config = require(__dirname + '/../config/database.js')[env];
@@ -20,10 +20,10 @@ fs
   .readdirSync(__dirname)
   .filter(file => {
     return (
-      file.indexOf('.') !== 0 &&
+      !file.startsWith('.') &&
       file !== basename &&
-      file.slice(-3) === '.js' &&
-      file.indexOf('.test.js') === -1
+      file.endsWith('.js') &&
+      !file.endsWith('.test.js')
     );
   })
   .forEach(file => {

@@ -2,7 +2,7 @@
 'use strict';
 const { Model } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+const defineSurchargeTypeModel = (sequelize, DataTypes) => {
   class SurchargeType extends Model {
     static associate(models) {
       // Typ dopłaty może być użyty w wielu pozycjach dopłat do zleceń
@@ -50,3 +50,5 @@ module.exports = (sequelize, DataTypes) => {
   });
   return SurchargeType;
 };
+
+module.exports = defineSurchargeTypeModel;
