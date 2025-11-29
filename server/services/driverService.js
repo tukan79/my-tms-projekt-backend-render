@@ -1,5 +1,6 @@
 // server/services/driverService.js
 
+const { randomInt } = require('node:crypto');
 const { Driver, sequelize } = require('../models');
 const logger = require('../config/logger');
 const { Op } = require('sequelize');
@@ -11,7 +12,7 @@ const { Op } = require('sequelize');
 const generateLoginCode = (firstName, lastName) => {
   if (!firstName || !lastName) return null;
   const initials = `${firstName[0]}${lastName[0]}`.toUpperCase();
-  const randomNumber = Math.floor(100 + Math.random() * 900);
+  const randomNumber = randomInt(100, 1000); // crypto-strong 3-digit number
   return `${initials}${randomNumber}`;
 };
 
