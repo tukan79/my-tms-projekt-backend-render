@@ -50,8 +50,7 @@ const defineUserModel = (sequelize, DataTypes) => {
     modelName: 'User',
     tableName: 'users', // Jawnie określamy nazwę tabeli
     timestamps: true, // Automatycznie dodaje createdAt i updatedAt
-    paranoid: true, // Włącza "soft delete" - `isDeleted` będzie zarządzane automatycznie
-    deletedAt: 'isDeleted', // Używamy `isDeleted` zamiast domyślnego `deletedAt`
+    paranoid: false, // isDeleted traktujemy jako flaga bool
     underscored: true, // Zapewnia, że wszystkie pola (np. createdAt) będą w snake_case
   });
   return User;

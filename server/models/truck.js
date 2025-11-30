@@ -48,8 +48,7 @@ const defineTruckModel = (sequelize, DataTypes) => {
     modelName: 'Truck',
     tableName: 'trucks',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // isDeleted to flaga bool
     underscored: true,
   });
   return Truck;

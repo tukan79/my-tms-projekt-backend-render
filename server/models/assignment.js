@@ -36,8 +36,7 @@ const defineAssignmentModel = (sequelize, DataTypes) => {
     modelName: 'Assignment',
     tableName: 'assignments',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // używamy bool isDeleted jako flagi, nie timestampu
     underscored: true,
   });
   return Assignment;

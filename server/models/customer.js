@@ -82,8 +82,7 @@ const defineCustomerModel = (sequelize, DataTypes) => {
     modelName: 'Customer',
     tableName: 'customers',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // isDeleted to flaga bool, nie timestamp
     // Mapowanie camelCase na snake_case jest już włączone globalnie
     // w config/database.js, ale dla jasności można dodać mapowania pól:
     underscored: true,

@@ -44,8 +44,7 @@ const defineTrailerModel = (sequelize, DataTypes) => {
     modelName: 'Trailer',
     tableName: 'trailers',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // boolean isDeleted used as flag, not Sequelize deletedAt
     underscored: true,
   });
   return Trailer;

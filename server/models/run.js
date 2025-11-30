@@ -52,8 +52,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName: 'Run',
     tableName: 'runs',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // isDeleted jako flaga bool
     underscored: true,
   });
   return Run;

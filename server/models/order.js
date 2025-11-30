@@ -85,8 +85,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName: 'Order',
     tableName: 'orders',
     timestamps: true, // Automatycznie zarządza createdAt i updatedAt
-    paranoid: true,   // Włącza "soft delete"
-    deletedAt: 'isDeleted', // Używa `isDeleted` zamiast `deletedAt`
+    paranoid: false,   // isDeleted to flaga bool, nie timestamp
     // Mapowanie camelCase na snake_case jest już włączone globalnie w config/database.js
   });
   return Order;

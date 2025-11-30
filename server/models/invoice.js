@@ -57,8 +57,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName: 'Invoice',
     tableName: 'invoices',
     timestamps: true,
-    paranoid: true,
-    deletedAt: 'isDeleted',
+    paranoid: false, // isDeleted jako flaga bool
     underscored: true,
   });
   return Invoice;
