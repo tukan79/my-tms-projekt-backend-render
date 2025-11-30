@@ -115,7 +115,7 @@ exports.deleteTrailer = async (req, res, next) => {
       return res.status(404).json({ error: 'Nie znaleziono naczepy lub brak uprawnień.' });
     }
 
-    logController('INFO', ctx, 'Trailer deleted', { id });
+    logController('INFO', ctx, 'Trailer deleted', { trailerId });
     res.status(204).send();
   } catch (error) {
     logController('ERROR', ctx, 'Failed to delete trailer', { error: error.message });
