@@ -108,8 +108,8 @@ exports.updateTrailer = async (req, res, next) => {
 exports.deleteTrailer = async (req, res, next) => {
   const ctx = 'deleteTrailer';
   try {
-    const { id } = req.params;
-    const changes = await trailerService.deleteTrailer(id);
+    const trailerId = req.params.trailerId || req.params.id;
+    const changes = await trailerService.deleteTrailer(trailerId);
 
     if (changes === 0) {
       return res.status(404).json({ error: 'Nie znaleziono naczepy lub brak uprawnień.' });
