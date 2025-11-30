@@ -139,14 +139,33 @@ const deleteDriver = async (driverId) => {
 // IMPORT
 // ------------------------------------------------------
 
+const toArrayPayload = (driversData) => {
+  if (Array.isArray(driversData)) return driversData;
+  if (Array.isArray(driversData?.drivers)) return driversData.drivers;
+  if (typeof driversData === 'string') {
+    try {
+      const parsed = JSON.parse(driversData);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.drivers)) return parsed.drivers;
+    } catch (e) {
+      // not JSON — fall through
+    }
+  }
+  const err = new Error('Invalid payload: expected array of drivers or { drivers: [...] }');
+  err.status = 400;
+  throw err;
+};
+
 const importDrivers = async (driversData) => {
   try {
+    const driversArray = toArrayPayload(driversData);
+
     return await sequelize.transaction(async (t) => {
       const importedDrivers = [];
       const errors = [];
       const processed = [];
 
-      for (const [index, driver] of driversData.entries()) {
+      for (const [index, driver] of driversArray.entries()) {
         if (!driver.first_name) {
           errors.push({
             line: index + 2,

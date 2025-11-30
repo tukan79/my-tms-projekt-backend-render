@@ -77,14 +77,7 @@ exports.createTrailer = async (req, res, next) => {
 exports.importTrailers = async (req, res, next) => {
   const ctx = 'importTrailers';
   try {
-    const { trailers } = req.body;
-    if (!trailers || !Array.isArray(trailers)) {
-      const error = new Error('Invalid data format. "trailers" array is required.');
-      error.status = 400;
-      throw error;
-    }
-
-    const result = await trailerService.importTrailers(trailers);
+    const result = await trailerService.importTrailers(req.body.trailers || req.body);
     logController('INFO', ctx, 'Trailers imported', { importedCount: result.importedCount });
     res.status(201).json({ message: `${result.importedCount} trailers imported successfully.`, ...result });
   } catch (error) {

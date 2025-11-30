@@ -1,6 +1,51 @@
 // Plik: server/services/trailerService.js
 const { Trailer, sequelize } = require('../models');
 
+const toInt = (value) => {
+  const num = Number.parseFloat(value);
+  return Number.isNaN(num) ? null : num;
+};
+
+const toBoolean = (value) => {
+  if (value === false) return false;
+  if (typeof value === 'string') {
+    return ['true', 'yes', '1', 't', 'y'].includes(value.toLowerCase());
+  }
+  return Boolean(value);
+};
+
+const normalizeTrailerData = (data) => ({
+  registrationPlate: data.registration_plate,
+  description: data.description || null,
+  category: data.category || null,
+  brand: data.brand || null,
+  maxPayloadKg: toInt(data.max_payload_kg),
+  maxSpaces: toInt(data.max_spaces),
+  lengthM: toInt(data.length_m),
+  widthM: toInt(data.width_m),
+  heightM: toInt(data.height_m),
+  weightKg: toInt(data.weight_kg),
+  status: data.status || 'inactive',
+  isActive: toBoolean(data.is_active),
+});
+
+const toArrayPayload = (input) => {
+  if (Array.isArray(input)) return input;
+  if (Array.isArray(input?.trailers)) return input.trailers;
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.trailers)) return parsed.trailers;
+    } catch (_) {
+      // not JSON
+    }
+  }
+  const err = new Error('Invalid payload: expected array of trailers or { trailers: [...] }');
+  err.status = 400;
+  throw err;
+};
+
 /**
  * Pobiera wszystkie naczepy przypisane do firmy użytkownika
  */
@@ -15,33 +60,24 @@ const findTrailersByCompany = async (companyId = null) => {
  * Tworzy nową naczepę
  */
 const createTrailer = async (trailerData) => {
-  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailerData;
+  const payload = normalizeTrailerData(trailerData);
+  const { registrationPlate, brand } = payload;
 
   if (!registrationPlate || !brand) {
     throw new Error('Numer rejestracyjny i marka są wymagane.');
   }
 
-  return Trailer.create({
-    registrationPlate,
-    brand,
-    model: model || null,
-    capacityKg: capacityKg || null,
-  });
+  return Trailer.create(payload);
 };
 
 /**
  * Aktualizuje istniejącą naczepę
  */
 const updateTrailer = async (trailerId, trailerData) => {
-  const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailerData;
+  const dataToUpdate = normalizeTrailerData(trailerData);
 
   const [updatedCount, updatedTrailers] = await Trailer.update(
-    {
-      registrationPlate,
-      brand,
-      model: model || null,
-      capacityKg: capacityKg || null,
-    },
+    dataToUpdate,
     {
       where: { id: trailerId },
       returning: true,
@@ -65,7 +101,8 @@ const deleteTrailer = async (trailerId) => {
  * Import wielu naczep (bulk) w ramach transakcji
  */
 const importTrailers = async (trailerArray) => {
-  if (!Array.isArray(trailerArray) || trailerArray.length === 0) {
+  const trailersData = toArrayPayload(trailerArray);
+  if (trailersData.length === 0) {
     throw new Error('Invalid input: array of trailers required.');
   }
 
@@ -73,24 +110,17 @@ const importTrailers = async (trailerArray) => {
     let importedCount = 0;
     const errors = [];
 
-    for (const [index, trailer] of trailerArray.entries()) {
+    for (const [index, trailer] of trailersData.entries()) {
       try {
-        const { registration_plate: registrationPlate, brand, model, capacity_kg: capacityKg } = trailer;
+        const payload = normalizeTrailerData(trailer);
+        const { registrationPlate, brand } = payload;
 
         if (!registrationPlate || !brand) {
           errors.push(`Row ${index + 1}: registrationPlate and brand are required.`);
           continue;
         }
 
-        await Trailer.upsert(
-          {
-            registrationPlate,
-            brand,
-            model: model || null,
-            capacityKg: capacityKg || null,
-          },
-          { transaction: t }
-        );
+        await Trailer.upsert(payload, { transaction: t });
 
         importedCount++;
       } catch (err) {

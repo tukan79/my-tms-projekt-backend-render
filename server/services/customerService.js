@@ -1,6 +1,23 @@
 // Plik server/services/customerService.js
 const { Customer, sequelize } = require('../models');
 
+const toArrayPayload = (customersData) => {
+  if (Array.isArray(customersData)) return customersData;
+  if (Array.isArray(customersData?.customers)) return customersData.customers;
+  if (typeof customersData === 'string') {
+    try {
+      const parsed = JSON.parse(customersData);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.customers)) return parsed.customers;
+    } catch (_) {
+      // not JSON — fall through
+    }
+  }
+  const err = new Error('Invalid payload: expected array of customers or { customers: [...] }');
+  err.status = 400;
+  throw err;
+};
+
 const createCustomer = async (customerData) => {
   const {
     name, customer_code: customerCode, address_line1: addressLine1, address_line2: addressLine2, address_line3: addressLine3, address_line4: addressLine4, 
@@ -54,6 +71,7 @@ const deleteCustomer = async (customerId) => {
 const importCustomers = async (customersData) => {
   return sequelize.transaction(async (t) => {
     const errors = [];
+    const customersArray = toArrayPayload(customersData);
 
     const toBoolean = (value) => {
       if (typeof value === 'string') {
@@ -63,7 +81,7 @@ const importCustomers = async (customersData) => {
     };
 
     const customersToCreateOrUpdate = [];
-    for (const [index, customerData] of customersData.entries()) {
+    for (const [index, customerData] of customersArray.entries()) {
       // Walidacja podstawowych danych
       if (!customerData.customer_code || !customerData.name) {
         errors.push({ line: index + 2, message: 'Missing required fields: customer_code or name.' });

@@ -136,7 +136,93 @@ exports.importOrders = async (req, res, next) => {
       });
     }
 
-    const result = await orderService.importOrders(parsed.data);
+    const toDateTime = (dateStr, timeStr) => {
+      if (!dateStr) return null;
+      const date = String(dateStr).split('T')[0];
+      if (!timeStr) return date;
+      return `${date}T${timeStr}`;
+    };
+
+    const toBoolean = (value) => {
+      if (typeof value === 'string') {
+        return ['true', 'yes', '1', 'y', 't'].includes(value.toLowerCase());
+      }
+      return Boolean(value);
+    };
+
+    const mapLegacyRow = (row) => {
+      if (!row || !row.ConsignmentNumber) return row;
+
+      const surcharges = [];
+      ['Surcharge1', 'Surcharge2', 'Surcharge3', 'Surcharge4', 'Surcharge5'].forEach((key) => {
+        if (row[key]) surcharges.push(row[key]);
+      });
+      if (row.Surcharges) surcharges.push(row.Surcharges);
+
+      return {
+        order_number: row.ConsignmentNumber,
+        customer_code: row.AccountCode,
+        customer_reference: row.CustomerReference || row.CustomerReference2 || null,
+        status: row.ConsignmentType || 'new',
+        service_level: row.ServiceCode || null,
+        sender_details: {
+          name: row.CollectionName || null,
+          address1: row.CollectionAddress1 || null,
+          address2: row.CollectionAddress2 || null,
+          town: row.CollectionTownCity || null,
+          county: row.CollectionCounty || null,
+          postCode: row.CollectionPostCode || null,
+          country: row.CollectionCountry || null,
+          contactName: row.CollectionContactName || null,
+          phone: row.CollectionPhone || null,
+          email: row.CollectionEmailAddress || null,
+          note: [row.CollectionNoteLine1, row.CollectionNoteLine2, row.CollectionNoteLine3, row.CollectionNoteLine4]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || null,
+          isResidential: toBoolean(row.CollectionIsResidential),
+        },
+        recipient_details: {
+          name: row.DeliveryName || null,
+          address1: row.DeliveryAddress1 || null,
+          address2: row.DeliveryAddress2 || null,
+          town: row.DeliveryTownCity || null,
+          county: row.DeliveryCounty || null,
+          postCode: row.DeliveryPostCode || null,
+          country: row.DeliveryCountry || null,
+          contactName: row.DeliveryContactName || null,
+          phone: row.DeliveryPhone || null,
+          email: row.DeliveryEmailAddress || null,
+          note: [row.DeliveryNoteLine1, row.DeliveryNoteLine2, row.DeliveryNoteLine3, row.DeliveryNoteLine4]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || null,
+          isResidential: toBoolean(row.DeliveryIsResidential),
+        },
+        cargo_details: {
+          totalSpaces: Number(row.TotalSpaces) || 0,
+          totalKilos: Number(row.TotalKilos) || 0,
+          unitCode: row.UnitCode || null,
+          quantities: {
+            full: Number(row.FullQ) || 0,
+            half: Number(row.HalfQ) || 0,
+            halfPlus: Number(row.HalfPlusQ) || 0,
+            quarter: Number(row.QuarterQ) || 0,
+            micro: Number(row.MicroQ) || 0,
+          },
+          custPaperworkRequired: toBoolean(row.CustPaperworkRequired),
+        },
+        selected_surcharges: surcharges.filter(Boolean),
+        loading_date_time: toDateTime(row.CollectionDate, row.CollectionTime),
+        unloading_date_time: toDateTime(row.DeliveryDate, row.DeliveryTime),
+        unloading_start_time: row.DeliveryTime || null,
+        unloading_end_time: null,
+      };
+    };
+
+    const normalizedData = parsed.data.map((row) => (row.ConsignmentNumber ? mapLegacyRow(row) : row));
+
+    const result = await orderService.importOrders(normalizedData);
 
     res.status(201).json({
       message: `Successfully processed ${result.count} orders.`,
