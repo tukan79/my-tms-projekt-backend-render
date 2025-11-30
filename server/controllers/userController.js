@@ -5,7 +5,8 @@ const Papa = require('papaparse');
 // Helper: transformacja użytkownika na snake_case
 const toSnakeCaseUser = (user) => {
   if (!user) return null;
-  const { firstName = '', lastName = '', ...rest } = user.get({ plain: true });
+  const plain = typeof user.get === 'function' ? user.get({ plain: true }) : user;
+  const { firstName = '', lastName = '', ...rest } = plain;
   return {
     ...rest,
     first_name: firstName,
