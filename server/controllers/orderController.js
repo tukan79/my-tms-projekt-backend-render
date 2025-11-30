@@ -151,7 +151,7 @@ exports.importOrders = async (req, res, next) => {
     };
 
     const mapLegacyRow = (row) => {
-      if (!row || !row.ConsignmentNumber) return row;
+      if (!row?.ConsignmentNumber) return row;
 
       const surcharges = [];
       ['Surcharge1', 'Surcharge2', 'Surcharge3', 'Surcharge4', 'Surcharge5'].forEach((key) => {

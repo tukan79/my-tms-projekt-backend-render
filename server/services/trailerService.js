@@ -37,8 +37,11 @@ const toArrayPayload = (input) => {
       const parsed = JSON.parse(input);
       if (Array.isArray(parsed)) return parsed;
       if (Array.isArray(parsed?.trailers)) return parsed.trailers;
-    } catch (_) {
-      // not JSON
+    } catch (err) {
+      const parseErr = new Error('Invalid JSON payload for trailers import');
+      parseErr.status = 400;
+      parseErr.cause = err;
+      throw parseErr;
     }
   }
   const err = new Error('Invalid payload: expected array of trailers or { trailers: [...] }');

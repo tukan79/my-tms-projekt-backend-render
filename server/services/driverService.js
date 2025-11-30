@@ -148,7 +148,10 @@ const toArrayPayload = (driversData) => {
       if (Array.isArray(parsed)) return parsed;
       if (Array.isArray(parsed?.drivers)) return parsed.drivers;
     } catch (e) {
-      // not JSON — fall through
+      const parseErr = new Error('Invalid JSON payload for drivers import');
+      parseErr.status = 400;
+      parseErr.cause = e;
+      throw parseErr;
     }
   }
   const err = new Error('Invalid payload: expected array of drivers or { drivers: [...] }');

@@ -9,8 +9,11 @@ const toArrayPayload = (customersData) => {
       const parsed = JSON.parse(customersData);
       if (Array.isArray(parsed)) return parsed;
       if (Array.isArray(parsed?.customers)) return parsed.customers;
-    } catch (_) {
-      // not JSON — fall through
+    } catch (err) {
+      const parseErr = new Error('Invalid JSON payload for customers import');
+      parseErr.status = 400;
+      parseErr.cause = err;
+      throw parseErr;
     }
   }
   const err = new Error('Invalid payload: expected array of customers or { customers: [...] }');
