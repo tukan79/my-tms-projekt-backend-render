@@ -238,6 +238,36 @@ const updateRateCard = async (id, { name }) => {
   }
 };
 
+const deleteRateCard = async (id) => {
+  const ctx = 'deleteRateCard';
+  const rcid = ensurePositiveInt(id);
+  if (!rcid) throw new Error('Invalid rate card id');
+
+  return sequelize.transaction(async (t) => {
+    const existing = await RateCard.findByPk(rcid, { transaction: t });
+    if (!existing) {
+      return null;
+    }
+
+    const assignmentsDeleted = await CustomerRateCardAssignment.destroy({
+      where: { rateCardId: rcid },
+      transaction: t,
+    });
+    const entriesDeleted = await RateEntry.destroy({
+      where: { rateCardId: rcid },
+      transaction: t,
+    });
+
+    await existing.destroy({ transaction: t });
+    log('info', ctx, 'Deleted rate card and related records', {
+      rateCardId: rcid,
+      assignmentsDeleted,
+      entriesDeleted,
+    });
+    return { id: rcid, assignmentsDeleted, entriesDeleted };
+  });
+};
+
 /* ---------------------------
    Import rate entries (CSV -> DB)
    - robust normalization
@@ -410,6 +440,7 @@ module.exports = {
   findAllRateCards,
   createRateCard,
   updateRateCard,
+  deleteRateCard,
   parsePrice,
   findValueByKeys,
   importRateEntries,

@@ -7,6 +7,7 @@ const router = express.Router();
 router.get('/', authenticateToken, requireRole(['admin']), rateCardController.getAllRateCards);
 router.post('/', authenticateToken, requireRole(['admin']), rateCardController.createRateCard);
 router.put('/:id', authenticateToken, requireRole(['admin']), rateCardController.updateRateCard);
+router.delete('/:id', authenticateToken, requireRole(['admin']), rateCardController.deleteRateCard);
 router.post('/:id/entries/import', authenticateToken, requireRole(['admin']), rateCardController.importRateEntries);
 
 // Routes for rate entries and customer assignments

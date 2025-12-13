@@ -87,6 +87,29 @@ exports.updateRateCard = async (req, res, next) => {
   }
 };
 
+exports.deleteRateCard = async (req, res, next) => {
+  const context = 'deleteRateCard';
+  try {
+    const parsedId = parsePositiveInt(req.params.id);
+    if (!parsedId) {
+      logger.warn('Invalid delete request - bad id', { context, id: req.params.id });
+      return res.status(400).json({ error: 'Invalid rate card id' });
+    }
+
+    logger.info('Deleting rate card', { context, id: parsedId });
+    const deleted = await rateCardService.deleteRateCard(parsedId);
+
+    if (!deleted) {
+      logger.warn('Rate card not found', { context, id: parsedId });
+      return res.status(404).json({ error: 'Rate card not found' });
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
 exports.getEntriesByRateCardId = async (req, res, next) => {
   const context = 'getEntriesByRateCardId';
   try {
