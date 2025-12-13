@@ -343,6 +343,21 @@ const findEntriesByRateCardId = async (rateCardId) => {
   }
 };
 
+const deleteEntriesByRateCardId = async (rateCardId) => {
+  const ctx = 'deleteEntriesByRateCardId';
+  const rcid = ensurePositiveInt(rateCardId);
+  if (!rcid) throw new Error('Invalid rateCardId');
+
+  const existing = await RateCard.findByPk(rcid);
+  if (!existing) {
+    return { found: false, deleted: 0 };
+  }
+
+  const deleted = await RateEntry.destroy({ where: { rateCardId: rcid } });
+  log('info', ctx, 'Deleted rate entries', { rateCardId: rcid, deleted });
+  return { found: true, deleted };
+};
+
 const findCustomersByRateCardId = async (rateCardId) => {
   const ctx = 'findCustomersByRateCardId';
   const rcid = ensurePositiveInt(rateCardId);
@@ -445,6 +460,7 @@ module.exports = {
   findValueByKeys,
   importRateEntries,
   findEntriesByRateCardId,
+  deleteEntriesByRateCardId,
   findCustomersByRateCardId,
   assignCustomerToRateCard,
   unassignCustomerFromRateCard,

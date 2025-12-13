@@ -127,6 +127,28 @@ exports.getEntriesByRateCardId = async (req, res, next) => {
   }
 };
 
+exports.deleteEntriesByRateCardId = async (req, res, next) => {
+  const context = 'deleteEntriesByRateCardId';
+  try {
+    const parsedId = parsePositiveInt(req.params.id);
+    if (!parsedId) {
+      logger.warn('Invalid delete entries request - bad id', { context, id: req.params.id });
+      return res.status(400).json({ error: 'Invalid rate card id' });
+    }
+
+    logger.info('Deleting rate entries', { context, rateCardId: parsedId });
+    const result = await rateCardService.deleteEntriesByRateCardId(parsedId);
+    if (!result.found) {
+      logger.warn('Rate card not found for delete entries', { context, id: parsedId });
+      return res.status(404).json({ error: 'Rate card not found' });
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
 exports.getCustomersByRateCardId = async (req, res, next) => {
   const context = 'getCustomersByRateCardId';
   try {

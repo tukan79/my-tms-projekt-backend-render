@@ -9,6 +9,7 @@ router.post('/', authenticateToken, requireRole(['admin']), rateCardController.c
 router.put('/:id', authenticateToken, requireRole(['admin']), rateCardController.updateRateCard);
 router.delete('/:id', authenticateToken, requireRole(['admin']), rateCardController.deleteRateCard);
 router.post('/:id/entries/import', authenticateToken, requireRole(['admin']), rateCardController.importRateEntries);
+router.delete('/:id/entries', authenticateToken, requireRole(['admin']), rateCardController.deleteEntriesByRateCardId);
 
 // Routes for rate entries and customer assignments
 router.get('/:id/entries', authenticateToken, requireRole(['admin']), rateCardController.getEntriesByRateCardId);
