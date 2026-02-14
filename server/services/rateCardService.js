@@ -447,6 +447,145 @@ const debugZoneMapping = async () => {
   return getZoneMappingInfo();
 };
 
+const updateRateEntry = async (entryId, payload = {}) => {
+  const ctx = 'updateRateEntry';
+  const id = ensurePositiveInt(entryId);
+  if (!id) throw new Error('Invalid rate entry id');
+
+  const parseOptionalPrice = (keys) => {
+    const raw = findValueByKeys(payload, keys);
+    return raw === undefined ? undefined : parsePrice(raw);
+  };
+
+  const allowedFields = {
+    rateType: findValueByKeys(payload, ['rateType', 'rate_type']),
+    serviceLevel: findValueByKeys(payload, ['serviceLevel', 'service_level']),
+    zoneId: ensurePositiveInt(findValueByKeys(payload, ['zoneId', 'zone_id'])),
+    priceMicro: parseOptionalPrice(['priceMicro', 'price_micro']),
+    priceQuarter: parseOptionalPrice(['priceQuarter', 'price_quarter']),
+    priceHalf: parseOptionalPrice(['priceHalf', 'price_half']),
+    priceHalfPlus: parseOptionalPrice(['priceHalfPlus', 'price_half_plus']),
+    priceFull1: parseOptionalPrice(['priceFull1', 'price_full_1']),
+    priceFull2: parseOptionalPrice(['priceFull2', 'price_full_2']),
+    priceFull3: parseOptionalPrice(['priceFull3', 'price_full_3']),
+    priceFull4: parseOptionalPrice(['priceFull4', 'price_full_4']),
+    priceFull5: parseOptionalPrice(['priceFull5', 'price_full_5']),
+    priceFull6: parseOptionalPrice(['priceFull6', 'price_full_6']),
+    priceFull7: parseOptionalPrice(['priceFull7', 'price_full_7']),
+    priceFull8: parseOptionalPrice(['priceFull8', 'price_full_8']),
+    priceFull9: parseOptionalPrice(['priceFull9', 'price_full_9']),
+    priceFull10: parseOptionalPrice(['priceFull10', 'price_full_10']),
+  };
+
+  const updates = Object.fromEntries(
+    Object.entries(allowedFields).filter(([, value]) => value !== undefined && value !== null)
+  );
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  try {
+    const entry = await RateEntry.findByPk(id);
+    if (!entry) return null;
+    await entry.update(updates);
+    return entry;
+  } catch (err) {
+    log('error', ctx, 'Failed to update rate entry', { id, message: err.message });
+    throw err;
+  }
+};
+
+const deleteRateEntry = async (entryId) => {
+  const ctx = 'deleteRateEntry';
+  const id = ensurePositiveInt(entryId);
+  if (!id) throw new Error('Invalid rate entry id');
+
+  try {
+    return RateEntry.destroy({ where: { id } });
+  } catch (err) {
+    log('error', ctx, 'Failed to delete rate entry', { id, message: err.message });
+    throw err;
+  }
+};
+
+const csvEscape = (value) => {
+  const str = value == null ? '' : String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+const exportRateEntriesCsv = async (rateCardId) => {
+  const ctx = 'exportRateEntriesCsv';
+  const rcid = ensurePositiveInt(rateCardId);
+  if (!rcid) throw new Error('Invalid rateCardId');
+
+  const rateCard = await RateCard.findByPk(rcid);
+  if (!rateCard) return null;
+
+  try {
+    const entries = await RateEntry.findAll({
+      where: { rateCardId: rcid },
+      include: [{ model: PostcodeZone, as: 'zone', attributes: ['zoneName'] }],
+      order: [['zoneId', 'ASC'], ['serviceLevel', 'ASC']],
+    });
+
+    const headers = [
+      'Rate Type',
+      'Zone Name',
+      'Service Level',
+      'Price Micro',
+      'Price Quarter',
+      'Price Half',
+      'Price Half Plus',
+      'Price Full 1',
+      'Price Full 2',
+      'Price Full 3',
+      'Price Full 4',
+      'Price Full 5',
+      'Price Full 6',
+      'Price Full 7',
+      'Price Full 8',
+      'Price Full 9',
+      'Price Full 10',
+    ];
+
+    const rows = entries.map((entry) => [
+      entry.rateType,
+      entry.zone?.zoneName || '',
+      entry.serviceLevel,
+      entry.priceMicro,
+      entry.priceQuarter,
+      entry.priceHalf,
+      entry.priceHalfPlus,
+      entry.priceFull1,
+      entry.priceFull2,
+      entry.priceFull3,
+      entry.priceFull4,
+      entry.priceFull5,
+      entry.priceFull6,
+      entry.priceFull7,
+      entry.priceFull8,
+      entry.priceFull9,
+      entry.priceFull10,
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((value) => csvEscape(value)).join(','))
+      .join('\n');
+
+    return {
+      fileName: `${String(rateCard.name || 'rate-card').replace(/\s+/g, '_')}_export.csv`,
+      csv,
+    };
+  } catch (err) {
+    log('error', ctx, 'Failed to export rate entries', { rateCardId: rcid, message: err.message });
+    throw err;
+  }
+};
+
 /* ---------------------------
    Exports
 ----------------------------*/
@@ -467,4 +606,7 @@ module.exports = {
   assignCustomersToRateCardBulk,
   getZoneMappingInfo,
   debugZoneMapping,
+  updateRateEntry,
+  deleteRateEntry,
+  exportRateEntriesCsv,
 };

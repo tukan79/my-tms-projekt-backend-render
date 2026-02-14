@@ -264,6 +264,88 @@ exports.importRateEntries = async (req, res, next) => {
   }
 };
 
+exports.importRateCards = async (req, res, next) => {
+  const context = 'importRateCards';
+  try {
+    const { rateCardId, rateCards } = req.body;
+    const parsedId = parsePositiveInt(rateCardId);
+
+    if (!parsedId) {
+      return res.status(400).json({
+        error: 'rateCardId is required for /api/rate-cards/import. Use /api/rate-cards/:id/entries/import when possible.',
+      });
+    }
+
+    if (!Array.isArray(rateCards) || rateCards.length === 0) {
+      return res.status(400).json({ error: '"rateCards" must be a non-empty array.' });
+    }
+
+    const result = await rateCardService.importRateEntries(parsedId, rateCards);
+    return res.status(201).json({ message: `Processed ${result.count} entries.`, ...result });
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
+exports.updateRateEntry = async (req, res, next) => {
+  const context = 'updateRateEntry';
+  try {
+    const entryId = parsePositiveInt(req.params.entryId);
+    if (!entryId) {
+      return res.status(400).json({ error: 'Invalid rate entry id' });
+    }
+
+    const updated = await rateCardService.updateRateEntry(entryId, req.body || {});
+    if (!updated) {
+      return res.status(404).json({ error: 'Rate entry not found' });
+    }
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
+exports.deleteRateEntry = async (req, res, next) => {
+  const context = 'deleteRateEntry';
+  try {
+    const entryId = parsePositiveInt(req.params.entryId);
+    if (!entryId) {
+      return res.status(400).json({ error: 'Invalid rate entry id' });
+    }
+
+    const deleted = await rateCardService.deleteRateEntry(entryId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Rate entry not found' });
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
+exports.exportRateCardEntries = async (req, res, next) => {
+  const context = 'exportRateCardEntries';
+  try {
+    const parsedId = parsePositiveInt(req.params.id);
+    if (!parsedId) {
+      return res.status(400).json({ error: 'Invalid rate card id' });
+    }
+
+    const exported = await rateCardService.exportRateEntriesCsv(parsedId);
+    if (!exported) {
+      return res.status(404).json({ error: 'Rate card not found' });
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${exported.fileName}"`);
+    return res.status(200).send(exported.csv);
+  } catch (err) {
+    return sendServerError(next, context, err);
+  }
+};
+
 exports.debugZones = async (req, res, next) => {
   const context = 'debugZones';
   try {

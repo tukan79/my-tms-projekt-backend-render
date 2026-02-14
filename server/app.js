@@ -21,7 +21,7 @@ app.use(compression());
 const DEFAULT_FRONTEND =
   process.env.FRONTEND_URL ||
   process.env.CLIENT_URL ||
-  "https://my-tms-projekt-frontend.vercel.app";
+  "https://my-tms-project-frontend.vercel.app";
 const LOCALHOST = process.env.CORS_ALLOW_LOCALHOST || "http://localhost:5173";
 
 const allowedOrigins = Array.from(
@@ -89,6 +89,7 @@ app.use("/api/orders", require("./routes/orderRoutes"));
 app.use("/api/invoices", require("./routes/invoiceRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
 app.use("/api/trucks", require("./routes/truckRoutes"));
+app.use("/api/optimization", require("./routes/optimizationRoutes"));
 
 // === Catch-all dla nieznanych tras ===
 app.use((req, res, next) => {
