@@ -32,7 +32,7 @@ services:
         fromSecret: DB_PASS
       DB_NAME:
         fromSecret: DB_NAME
-      DB_URL:
+      DATABASE_URL:
         fromSecret: DATABASE_URL
 
       FRONTEND_URL:
