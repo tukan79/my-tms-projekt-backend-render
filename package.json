@@ -7,7 +7,11 @@
     "start": "cd server && npm start",
     "dev": "cd server && npm run dev",
     "build": "cd server && npm install --omit=dev",
-    "db:init": "node server/db/init.js"
+    "db:init": "node server/db/init.js",
+    "optimizer:install": "cd optimizer && python3 -m pip install -r requirements.txt",
+    "optimizer:test:install": "cd optimizer && python3 -m pip install -r requirements-dev.txt",
+    "optimizer:test": "cd optimizer && python3 -m pytest -q tests/test_app.py",
+    "optimizer:dev": "cd optimizer && AUTH_TOKEN=${OPTIMIZER_TOKEN:-change-me} uvicorn app:app --reload --host 0.0.0.0 --port 8001"
   },
   "keywords": [
     "tms",

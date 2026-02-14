@@ -11,3 +11,15 @@ Currently, two official plugins are available:
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
 # my-tms-projekt-backend-render
+
+## Optimizer tests (Python)
+
+```bash
+python3 -m pip install -r optimizer/requirements-dev.txt
+python3 -m pytest -q optimizer/tests/test_app.py
+```
+
+```bash
+npm run optimizer:test:install
+npm run optimizer:test
+```
