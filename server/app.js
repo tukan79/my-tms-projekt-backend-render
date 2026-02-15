@@ -23,6 +23,8 @@ const DEFAULT_FRONTEND =
   process.env.CLIENT_URL ||
   "https://my-tms-project-frontend.vercel.app";
 const LOCALHOST = process.env.CORS_ALLOW_LOCALHOST || "http://localhost:5173";
+const ALLOW_VERCEL_PREVIEWS = (process.env.CORS_ALLOW_VERCEL_PREVIEWS || "true") === "true";
+const VERCEL_PROJECT_PREFIX = process.env.CORS_VERCEL_PROJECT_PREFIX || "my-tms-project-frontend";
 
 const allowedOrigins = Array.from(
   new Set(
@@ -35,6 +37,19 @@ const allowedOrigins = Array.from(
 
 console.log("🌍 Allowed origins:", allowedOrigins);
 
+const isAllowedVercelPreviewOrigin = (origin) => {
+  if (!ALLOW_VERCEL_PREVIEWS) return false;
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== "https:") return false;
+    if (!hostname.endsWith(".vercel.app")) return false;
+    return hostname === `${VERCEL_PROJECT_PREFIX}.vercel.app` || hostname.startsWith(`${VERCEL_PROJECT_PREFIX}-`);
+  } catch {
+    return false;
+  }
+};
+
 // --- CORS CONFIG ---
 app.use(
   cors({
@@ -44,6 +59,9 @@ app.use(
         return callback(null, true);
       }
       if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (isAllowedVercelPreviewOrigin(origin)) {
         return callback(null, true);
       }
       console.warn("❌ BLOCKED ORIGIN:", origin);
