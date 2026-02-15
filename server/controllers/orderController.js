@@ -117,25 +117,6 @@ exports.generateLabels = async (req, res, next) => {
 
 exports.importOrders = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
-    }
-
-    const csvData = req.file.buffer.toString('utf-8');
-    const parsed = Papa.parse(csvData, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: false, // bezpieczeństwo
-    });
-
-    if (parsed.errors.length > 0) {
-      console.error('CSV parse errors:', parsed.errors);
-      return res.status(400).json({
-        error: 'Error parsing CSV file.',
-        details: parsed.errors,
-      });
-    }
-
     const toDateTime = (dateStr, timeStr) => {
       if (!dateStr) return null;
       const date = String(dateStr).split('T')[0];
@@ -220,7 +201,40 @@ exports.importOrders = async (req, res, next) => {
       };
     };
 
-    const normalizedData = parsed.data.map((row) => (row.ConsignmentNumber ? mapLegacyRow(row) : row));
+    let normalizedData = [];
+
+    // Mode 1: JSON payload from frontend importer ({ orders: [...] } or plain array)
+    if (Array.isArray(req.body?.orders)) {
+      normalizedData = req.body.orders;
+    } else if (Array.isArray(req.body)) {
+      normalizedData = req.body;
+    } else if (req.file) {
+      // Mode 2: CSV upload (legacy)
+      const csvData = req.file.buffer.toString('utf-8');
+      const parsed = Papa.parse(csvData, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+      });
+
+      if (parsed.errors.length > 0) {
+        console.error('CSV parse errors:', parsed.errors);
+        return res.status(400).json({
+          error: 'Error parsing CSV file.',
+          details: parsed.errors,
+        });
+      }
+
+      normalizedData = parsed.data.map((row) => (row.ConsignmentNumber ? mapLegacyRow(row) : row));
+    } else {
+      return res.status(400).json({
+        error: 'Invalid import payload. Send CSV file or JSON body with "orders" array.',
+      });
+    }
+
+    if (!Array.isArray(normalizedData) || normalizedData.length === 0) {
+      return res.status(400).json({ error: 'No orders to import.' });
+    }
 
     const result = await orderService.importOrders(normalizedData);
 
