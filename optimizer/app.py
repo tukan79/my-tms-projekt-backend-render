@@ -63,7 +63,7 @@ class OptimizeRequest(BaseModel):
 
 
 class Stop(BaseModel):
-    job_id: Optional[str]
+    job_id: Optional[str] = None
     index: int
     arrival_min: int
     departure_min: int
@@ -87,13 +87,12 @@ class OptimizeResponse(BaseModel):
 # ---------------------- Utils ----------------------
 def authorize(header: Optional[str]):
     if AUTH_TOKEN is None:
-        return True
+        return
     if not header:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     scheme, _, token = header.partition(" ")
     if scheme.lower() != "bearer" or token != AUTH_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid token")
-    return True
 
 
 def build_manager(data: OptimizeRequest):
