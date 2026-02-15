@@ -22,17 +22,25 @@ const RATE_TYPES = {
 // PUBLIC API
 // ============================================================================
 async function calculateOrderPrice(order) {
-    normalizeOrder(order);
-    validateOrder(order);
+    try {
+        normalizeOrder(order);
+        validateOrder(order);
 
-    const zones = await resolveZones(order);
-    const rateCardId = await getRateCardId(order.customer_id);
+        const zones = await resolveZones(order);
+        const rateCardId = await getRateCardId(order.customer_id);
 
-    const baseResult = await calculateScenarioPrice(order, zones, rateCardId);
+        const baseResult = await calculateScenarioPrice(order, zones, rateCardId);
 
-    const resultWithSurcharges = await applySurcharges(order, baseResult);
+        const resultWithSurcharges = await applySurcharges(order, baseResult);
 
-    return formatFinalPrice(resultWithSurcharges);
+        return formatFinalPrice(resultWithSurcharges);
+    } catch (error) {
+        logger.warn('Pricing fallback applied', {
+            reason: error?.message || 'unknown',
+            customerId: order?.customer_id ?? order?.customerId ?? null,
+        });
+        return formatFinalPrice(emptyPrice());
+    }
 }
 
 // ============================================================================
@@ -87,13 +95,24 @@ async function resolveZones(order) {
 async function findZone(postcode) {
     if (!postcode || typeof postcode !== 'string') return null;
 
-    return await PostcodeZone.findOne({
-        where: {
-            postcodePrefix: {
-                [Op.like]: `${postcode.substring(0, 3)}%`,
-            },
-        },
+    const normalizedPostcode = String(postcode).toUpperCase().replace(/\s+/g, '');
+    const outwardCode = normalizedPostcode.split(/[^A-Z0-9]/)[0];
+    if (!outwardCode) return null;
+
+    const zones = await PostcodeZone.findAll();
+    const zone = zones.find((z) => {
+        const patterns = Array.isArray(z.postcodePatterns) ? z.postcodePatterns : [];
+        return patterns.some((pattern) => {
+            const raw = String(pattern || '').toUpperCase().replace(/\s+/g, '');
+            if (!raw) return false;
+
+            // Support wildcard-like values from imported CSVs, e.g. "CW5*"
+            const prefix = raw.endsWith('*') ? raw.slice(0, -1) : raw;
+            return outwardCode.startsWith(prefix) || normalizedPostcode.startsWith(prefix);
+        });
     });
+
+    return zone || null;
 }
 
 // ============================================================================
