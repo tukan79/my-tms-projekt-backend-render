@@ -2,9 +2,20 @@
 const { Resend } = require('resend');
 const logger = require('../config/logger.js');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 const sendBugReportEmail = async (bugReport) => {
+  if (!resend) {
+    logger.warn('Skipping bug report email: RESEND_API_KEY is not configured.');
+    return null;
+  }
+
+  if (!process.env.EMAIL_TO) {
+    logger.warn('Skipping bug report email: EMAIL_TO is not configured.');
+    return null;
+  }
+
   const { description, context } = bugReport;
 
   const emailHtml = `
