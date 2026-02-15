@@ -94,25 +94,57 @@ async function resolveZones(order) {
 
 async function findZone(postcode) {
     if (!postcode || typeof postcode !== 'string') return null;
-
-    const normalizedPostcode = String(postcode).toUpperCase().replace(/\s+/g, '');
-    const outwardCode = normalizedPostcode.split(/[^A-Z0-9]/)[0];
-    if (!outwardCode) return null;
-
-    const zones = await PostcodeZone.findAll();
-    const zone = zones.find((z) => {
-        const patterns = Array.isArray(z.postcodePatterns) ? z.postcodePatterns : [];
-        return patterns.some((pattern) => {
-            const raw = String(pattern || '').toUpperCase().replace(/\s+/g, '');
-            if (!raw) return false;
-
-            // Support wildcard-like values from imported CSVs, e.g. "CW5*"
-            const prefix = raw.endsWith('*') ? raw.slice(0, -1) : raw;
-            return outwardCode.startsWith(prefix) || normalizedPostcode.startsWith(prefix);
-        });
+    const normalizedPostcode = normalizePostcode(postcode);
+    const zones = await PostcodeZone.findAll({
+        attributes: ['id', 'zoneName', 'postcodePatterns', 'isHomeZone'],
     });
 
-    return zone || null;
+    let bestMatch = null;
+    let bestScore = -1;
+
+    for (const zone of zones) {
+        const patterns = Array.isArray(zone.postcodePatterns) ? zone.postcodePatterns : [];
+
+        for (const rawPattern of patterns) {
+            const matchScore = getPatternMatchScore(rawPattern, normalizedPostcode);
+            if (matchScore > bestScore) {
+                bestScore = matchScore;
+                bestMatch = zone;
+            }
+        }
+    }
+
+    return bestMatch;
+}
+
+function normalizePostcode(value) {
+    return String(value || '')
+        .toUpperCase()
+        .replace(/\s+/g, '');
+}
+
+function getPatternMatchScore(rawPattern, normalizedPostcode) {
+    if (!rawPattern || !normalizedPostcode) return -1;
+
+    const normalizedPattern = normalizePostcode(rawPattern);
+    if (!normalizedPattern) return -1;
+
+    const wildcardSuffix = normalizedPattern.endsWith('%') || normalizedPattern.endsWith('*');
+    const basePattern = wildcardSuffix
+        ? normalizedPattern.slice(0, -1)
+        : normalizedPattern;
+
+    if (!basePattern) return -1;
+
+    if (wildcardSuffix) {
+        return normalizedPostcode.startsWith(basePattern) ? basePattern.length : -1;
+    }
+
+    if (normalizedPostcode === basePattern) {
+        return basePattern.length + 1000;
+    }
+
+    return normalizedPostcode.startsWith(basePattern) ? basePattern.length : -1;
 }
 
 // ============================================================================
