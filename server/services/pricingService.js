@@ -195,15 +195,17 @@ function isStandardDeliveryScenario({ sourceZone }) {
 // RATE ENTRY FETCH
 // ============================================================================
 async function findRateEntries(rateCardId, types, zones, order) {
-    return await RateEntry.findAll({
-        where: {
-            rateCardId,
-            rate_type: { [Op.in]: types },
-            zone_id: { [Op.in]: zones },
-            weight_from: { [Op.lte]: order.parcel_weight },
-            weight_to: { [Op.gte]: order.parcel_weight },
-        },
-    });
+    const where = {
+        rateCardId,
+        rateType: { [Op.in]: types },
+        zoneId: { [Op.in]: zones },
+    };
+
+    if (order?.service_level || order?.serviceLevel) {
+        where.serviceLevel = order.service_level ?? order.serviceLevel;
+    }
+
+    return await RateEntry.findAll({ where });
 }
 
 // ============================================================================
@@ -226,7 +228,7 @@ async function priceStandardDelivery(order, zones, rateCardId) {
     );
 
     return entries.length
-        ? convertToResult(entries[0])
+        ? convertToResult(entries[0], order)
         : emptyPrice();
 }
 
@@ -241,8 +243,8 @@ async function priceP2P(order, zones, rateCardId) {
     const collection = entries.find(e => e.rate_type === RATE_TYPES.COLLECTION);
     const delivery = entries.find(e => e.rate_type === RATE_TYPES.DELIVERY);
 
-    const colRes = collection ? convertToResult(collection) : emptyPrice();
-    const delRes = delivery ? convertToResult(delivery) : emptyPrice();
+    const colRes = collection ? convertToResult(collection, order) : emptyPrice();
+    const delRes = delivery ? convertToResult(delivery, order) : emptyPrice();
 
     return mergeScenarioResults(colRes, delRes);
 }
@@ -253,18 +255,19 @@ async function priceP2P(order, zones, rateCardId) {
 
 async function priceSingleLeg(rateCardId, rateTypes, zoneId, order) {
     const entries = await findRateEntries(rateCardId, rateTypes, [zoneId], order);
-    return entries.length ? convertToResult(entries[0]) : emptyPrice();
+    return entries.length ? convertToResult(entries[0], order) : emptyPrice();
 }
 
-function convertToResult(entry) {
+function convertToResult(entry, order) {
+    const baseAmount = calculateEntryAmount(entry, order);
     return {
-        total: Number(entry.price || 0),
-        finalPrice: Number(entry.price || 0),
+        total: baseAmount,
+        finalPrice: baseAmount,
         breakdown: [
             {
-                type: entry.rate_type,
-                description: `${entry.rate_type} base charge`,
-                amount: Number(entry.price || 0),
+                type: entry.rateType || entry.rate_type || 'delivery',
+                description: `${entry.rateType || entry.rate_type || 'delivery'} base charge`,
+                amount: baseAmount,
             },
         ],
     };
@@ -280,6 +283,86 @@ function mergeScenarioResults(c, d) {
 
 function emptyPrice() {
     return { total: 0, finalPrice: 0, breakdown: [] };
+}
+
+function calculateEntryAmount(entry, order) {
+    const qty = getPalletQuantities(order);
+
+    const linear =
+        qty.micro * toNumber(entry.priceMicro) +
+        qty.quarter * toNumber(entry.priceQuarter) +
+        qty.half * toNumber(entry.priceHalf) +
+        qty.halfPlus * toNumber(entry.priceHalfPlus);
+
+    const full = calculateFullAmount(toNumberMap(entry), qty.full);
+    return round(linear + full);
+}
+
+function getPalletQuantities(order) {
+    const quantities = {
+        micro: 0,
+        quarter: 0,
+        half: 0,
+        halfPlus: 0,
+        full: 0,
+    };
+
+    const cargo = order?.cargo_details ?? order?.cargoDetails ?? {};
+
+    const fromPallets = Array.isArray(cargo.pallets) ? cargo.pallets : [];
+    for (const p of fromPallets) {
+        const type = String(p?.type || '').toLowerCase();
+        const q = toNumber(p?.quantity);
+        if (!q) continue;
+        if (type === 'micro') quantities.micro += q;
+        if (type === 'quarter') quantities.quarter += q;
+        if (type === 'half') quantities.half += q;
+        if (type === 'halfplus' || type === 'half_plus') quantities.halfPlus += q;
+        if (type === 'full') quantities.full += q;
+    }
+
+    const fromQuantities = cargo.quantities || {};
+    quantities.micro += toNumber(fromQuantities.micro);
+    quantities.quarter += toNumber(fromQuantities.quarter);
+    quantities.half += toNumber(fromQuantities.half);
+    quantities.halfPlus += toNumber(fromQuantities.halfPlus);
+    quantities.full += toNumber(fromQuantities.full);
+
+    return quantities;
+}
+
+function toNumberMap(entry) {
+    return {
+        1: toNumber(entry.priceFull1),
+        2: toNumber(entry.priceFull2),
+        3: toNumber(entry.priceFull3),
+        4: toNumber(entry.priceFull4),
+        5: toNumber(entry.priceFull5),
+        6: toNumber(entry.priceFull6),
+        7: toNumber(entry.priceFull7),
+        8: toNumber(entry.priceFull8),
+        9: toNumber(entry.priceFull9),
+        10: toNumber(entry.priceFull10),
+    };
+}
+
+function calculateFullAmount(fullPriceMap, fullQty) {
+    let qty = toNumber(fullQty);
+    if (!qty) return 0;
+
+    let total = 0;
+    while (qty > 0) {
+        const chunk = Math.min(qty, 10);
+        const chunkPrice = fullPriceMap[chunk] || 0;
+        total += chunkPrice;
+        qty -= chunk;
+    }
+    return total;
+}
+
+function toNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
 }
 
 // ============================================================================
